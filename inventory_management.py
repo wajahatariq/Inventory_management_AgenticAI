@@ -36,7 +36,7 @@ if selection == "Add Item":
             "quantity": quantity,
             "price": price
         })
-        st.success("Item added successfully!")
+        st.success("✅ Item added successfully!")
 
 # ---------- View Inventory Page ----------
 elif selection == "View Inventory":
@@ -44,11 +44,10 @@ elif selection == "View Inventory":
     df = pd.DataFrame(st.session_state.inventory)
 
     if not df.empty:
-        edited_row = None
         for idx, row in df.iterrows():
-            col1, col2, col3 = st.columns([4, 1, 1])
+            col1, col2, col3 = st.columns([5, 1, 1])
             with col1:
-                st.markdown(f"**{row['name']}** - {row['category']} | Qty: {row['quantity']} | ${row['price']:.2f}")
+                st.markdown(f"**{row['name']}** ({row['category']}) - Qty: {row['quantity']} - ${row['price']:.2f}")
             with col2:
                 if st.button("✏️", key=f"edit_{row['id']}"):
                     st.session_state.editing_id = row['id']
@@ -57,6 +56,7 @@ elif selection == "View Inventory":
                     st.session_state.inventory = [item for item in st.session_state.inventory if item['id'] != row['id']]
                     st.experimental_rerun()
 
+            # Edit Form
             if st.session_state.editing_id == row['id']:
                 with st.form(f"edit_form_{row['id']}"):
                     new_name = st.text_input("Item Name", row['name'])
@@ -74,35 +74,45 @@ elif selection == "View Inventory":
                                 "price": new_price
                             })
                             st.session_state.editing_id = None
-                            st.success("Item updated successfully!")
+                            st.success("✅ Item updated!")
                             st.experimental_rerun()
 
-        # CSV Download Button
-        st.download_button("📥 Download CSV", df.to_csv(index=False), file_name="inventory.csv", mime="text/csv")
+        st.download_button("📥 Download as CSV", df.to_csv(index=False), file_name="inventory.csv", mime="text/csv")
     else:
-        st.info("No items in inventory.")
+        st.info("No items in inventory yet. Add some first!")
 
 # ---------- Ask Agent Page ----------
 elif selection == "Ask Agent":
     st.header("🧠 Ask Inventory Agent")
-    user_question = st.text_area("What do you want to know about your inventory?")
-    ask = st.button("Ask Agent")
 
-    if ask and user_question:
+    if not st.session_state.inventory:
+        st.info("No inventory data available. Add items first.")
+    else:
         df = pd.DataFrame(st.session_state.inventory)
-        data_csv = df.to_csv(index=False)
+        st.dataframe(df, use_container_width=True)
 
-        try:
-            response = litellm.completion(
-                messages=[
-                    {"role": "system", "content": "You are an intelligent assistant that helps analyze and answer questions about a user's inventory."},
-                    {"role": "user", "content": f"Here's my inventory data:
-{data_csv}
+        user_question = st.text_area("💬 What do you want to know about your inventory?")
+        ask = st.button("Ask Agent")
 
-Question: {user_question}"}
+        if ask and user_question:
+            try:
+                inventory_text = df.to_string(index=False)
+                messages = [
+                    {
+                        "role": "system",
+                        "content": "You're an inventory assistant that analyzes and answers inventory-related questions clearly and intelligently."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Here's my inventory data:
+
+{inventory_text}
+
+Question: {user_question}"""
+                    }
                 ]
-            )
-            agent_reply = response["choices"][0]["message"]["content"]
-            st.success(agent_reply)
-        except Exception as e:
-            st.error(f"Agent error: {str(e)}")
+                response = litellm.completion(model=litellm.model, messages=messages)
+                answer = response["choices"][0]["message"]["content"]
+                st.success(answer)
+            except Exception as e:
+                st.error(f"⚠️ Agent error: {str(e)}")
