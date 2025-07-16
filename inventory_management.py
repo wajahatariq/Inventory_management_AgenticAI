@@ -4,7 +4,9 @@ import os
 
 # Setup your Gemini model here using LiteLLM
 litellm.model = "gemini/gemini-1.5-flash"
-litellm.api_key = os.getenv("GEMINI_API_KEY") or "your-api-key-here"  # Replace with your Gemini API Key
+
+import streamlit as st
+litellm.api_key = st.secrets["GEMINI_API_KEY"]
 
 # ---- Memory store ----
 if "inventory" not in st.session_state:
