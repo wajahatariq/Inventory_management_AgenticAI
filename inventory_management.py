@@ -2,124 +2,121 @@ import streamlit as st
 import pandas as pd
 import os
 import litellm
-from litellm import completion
-from io import StringIO
+from dotenv import load_dotenv
 
-# LiteLLM config
+load_dotenv()
+
+# Configure Gemini model
 litellm.model = "gemini/gemini-1.5-flash"
-litellm.api_key = os.getenv("GEMINI_API_KEY") or "your-api-key-here"
+litellm.api_key = os.getenv("GEMINI_API_KEY")
 
-st.set_page_config(page_title="Personal Accessories Inventory", layout="wide")
-
-# Session state initialization
-if "categories" not in st.session_state:
-    st.session_state.categories = []
-
+# Initialize session states
 if "inventory" not in st.session_state:
     st.session_state.inventory = []
 
-# Sidebar
-st.sidebar.title("Inventory App")
-page = st.sidebar.radio("Menu", ["Add Category", "View Inventory", "Ask Agent"])
+if "categories" not in st.session_state:
+    st.session_state.categories = []
 
-# Add Category Page
-if page == "Add Category":
-    st.title("➕ Add New Category")
-    with st.form("category_form"):
-        name = st.text_input("Category Name")
-        type_ = st.text_input("Type")
-        submitted = st.form_submit_button("Add Category")
-        if submitted:
-            st.session_state.categories.append({"name": name, "type": type_})
-            st.success(f"Category '{name}' added!")
+# Sidebar options
+st.sidebar.title("Inventory Manager")
+page = st.sidebar.radio("Go to", ["Add Inventory", "View Inventory", "View Categories", "Ask Agent"])
 
-# View Inventory Page
+st.title("🗂️ Inventory Management System")
+
+# ---------- Add Inventory ----------
+if page == "Add Inventory":
+    st.subheader("Add Inventory Item")
+
+    name = st.text_input("Item Name")
+    category = st.selectbox("Category", options=st.session_state.categories + ["-- Add New Category --"])
+    if category == "-- Add New Category --":
+        category = st.text_input("Enter New Category")
+
+    quantity = st.number_input("Quantity", min_value=0, step=1)
+    price = st.number_input("Price", min_value=0.0, format="%.2f")
+
+    if st.button("Add Item"):
+        if name and category:
+            # Add new category if not already in list
+            if category not in st.session_state.categories:
+                st.session_state.categories.append(category)
+
+            item = {"name": name, "category": category, "quantity": quantity, "price": price}
+            st.session_state.inventory.append(item)
+            st.success(f"Item '{name}' added to inventory.")
+        else:
+            st.error("Please fill all the fields.")
+
+# ---------- View Inventory ----------
 elif page == "View Inventory":
-    st.title("📋 View & Manage Inventory")
+    st.subheader("📋 View & Manage Inventory")
 
-    # Add Inventory Form
-    with st.form("add_inventory"):
-        name = st.text_input("Item Name")
-        category = st.selectbox("Category", [cat["name"] for cat in st.session_state.categories])
-        quantity = st.number_input("Quantity", min_value=0)
-        price = st.number_input("Price ($)", min_value=0.0)
-        add_item = st.form_submit_button("Add Item")
-        if add_item:
-            st.session_state.inventory.append({
-                "name": name, "category": category,
-                "quantity": quantity, "price": price
-            })
-            st.success(f"Added '{name}' to inventory.")
-
-    st.markdown("---")
-    st.subheader("Inventory Items")
     if st.session_state.inventory:
         df = pd.DataFrame(st.session_state.inventory)
-        col1, col2, col3, col4, col5 = st.columns([3, 2, 2, 2, 2])
-        col1.markdown("**Name**")
-        col2.markdown("**Category**")
-        col3.markdown("**Qty**")
-        col4.markdown("**Price ($)**")
-        col5.markdown("**Delete**")
+        df.index += 1  # Start row index from 1
 
+        # Show as table with delete button per row
         for i, row in df.iterrows():
-            col1, col2, col3, col4, col5 = st.columns([3, 2, 2, 2, 2])
-            col1.markdown(row["name"])
-            col2.markdown(row["category"])
-            col3.markdown(str(row["quantity"]))
-            col4.markdown(f"${row['price']:.2f}")
-            if col5.button("Delete", key=f"del_inventory_{i}"):
-                st.session_state.inventory.pop(i)
-                st.experimental_rerun()
+            cols = st.columns([3, 3, 2, 2, 2])
+            cols[0].markdown(f"**{row['name']}**")
+            cols[1].markdown(f"{row['category']}")
+            cols[2].markdown(f"{int(row['quantity'])}")
+            cols[3].markdown(f"${float(row['price']):.2f}")
+            if cols[4].button("Delete", key=f"del_{i}"):
+                st.session_state.inventory.pop(i - 1)
+                st.rerun()
 
-        # CSV Download
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("📥 Download Inventory CSV", csv, "inventory.csv", "text/csv")
+        # Table headers
+        st.markdown("#### Inventory Items")
+        st.markdown("| Item | Category | Quantity | Price |")
+        st.markdown("|------|----------|----------|--------|")
     else:
-        st.info("No items in inventory yet.")
+        st.info("Inventory is empty.")
 
-    st.markdown("---")
-    st.subheader("Categories")
+# ---------- View Categories ----------
+elif page == "View Categories":
+    st.subheader("📁 Available Categories")
+
     if st.session_state.categories:
-        df_cat = pd.DataFrame(st.session_state.categories)
-        col1, col2, col3 = st.columns([4, 4, 2])
-        col1.markdown("**Name**")
-        col2.markdown("**Type**")
-        col3.markdown("**Delete**")
+        df_cat = pd.DataFrame({"Category": st.session_state.categories})
+        df_cat.index += 1
 
-        for i, row in df_cat.iterrows():
-            col1, col2, col3 = st.columns([4, 4, 2])
-            col1.markdown(row["name"])
-            col2.markdown(row["type"])
-            if col3.button("Delete", key=f"del_category_{i}"):
-                st.session_state.categories.pop(i)
-                st.experimental_rerun()
+        cols = st.columns([6, 1])
+        for i, cat in df_cat.iterrows():
+            cols = st.columns([10, 2])
+            cols[0].markdown(f"**{cat['Category']}**")
+            if cols[1].button("Delete", key=f"delcat_{i}"):
+                st.session_state.categories.pop(i - 1)
+                st.rerun()
     else:
-        st.info("No categories found.")
+        st.info("No categories added yet.")
 
-# Ask Agent Page
+# ---------- Ask Agent ----------
 elif page == "Ask Agent":
-    st.title("🤖 Ask Inventory Agent")
+    st.subheader("🤖 Ask the Inventory Agent")
 
-    user_query = st.text_input("Ask a question about your inventory:")
-    ask = st.button("Ask Agent")
-
-    if ask and user_query:
-        df = pd.DataFrame(st.session_state.inventory)
-        if df.empty:
-            st.warning("No inventory data to analyze.")
+    user_query = st.text_area("Enter your question about the inventory")
+    if st.button("Ask Agent"):
+        if not st.session_state.inventory:
+            st.warning("Inventory is empty.")
+        elif user_query.strip() == "":
+            st.warning("Please enter a question.")
         else:
-            inventory_data = df.to_string(index=False)
+            import litellm
+
+            df = pd.DataFrame(st.session_state.inventory)
+            data_csv = df.to_csv(index=False)
+
             try:
-                response = completion(
+                messages = [
+                    {"role": "system", "content": "You are an inventory assistant. Answer user questions based on the CSV data provided."},
+                    {"role": "user", "content": f"Here's my inventory data:\n{data_csv}"},
+                    {"role": "user", "content": user_query}
+                ]
+                response = litellm.completion(
                     model=litellm.model,
-                    messages=[
-                        {"role": "system", "content": "You're a helpful assistant that answers questions about inventory."},
-                        {"role": "user", "content": f"Here's my inventory data:\n\n{inventory_data}\n\nNow answer this: {user_query}"}
-                    ]
+                    messages=messages,
                 )
-                answer = response["choices"][0]["message"]["content"]
-                st.markdown("### 💡 Agent Response")
-                st.write(answer)
+                st.success(response["choices"][0]["message"]["content"])
             except Exception as e:
-                st.error(f"Agent failed: {e}")
+                st.error(f"Agent error: {e}")
