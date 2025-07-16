@@ -11,8 +11,8 @@ litellm.model = "gemini/gemini-1.5-flash"
 # ---------- Session State Initialization ----------
 if "inventory" not in st.session_state:
     st.session_state.inventory = []
-if "editing_id" not in st.session_state:
-    st.session_state.editing_id = None
+if "delete_id" not in st.session_state:
+    st.session_state.delete_id = None
 
 # ---------- Sidebar Navigation ----------
 st.sidebar.title("Inventory Manager")
@@ -59,11 +59,18 @@ elif selection == "View Inventory":
             col2.markdown(row["category"])
             col3.markdown(f"{int(row['quantity'])}")
             col4.markdown(f"${float(row['price']):.2f}")
-            if col5.button("🗑️ Delete", key=f"del_{row['id']}"):
-                st.session_state.inventory = [i for i in st.session_state.inventory if i["id"] != row["id"]]
-                st.experimental_rerun()
+            if col5.button("Delete", key=f"del_{row['id']}"):
+                st.session_state.delete_id = row["id"]
 
-        # CSV Download
+        # Handle Deletion After Loop
+        if st.session_state.delete_id:
+            st.session_state.inventory = [
+                i for i in st.session_state.inventory if i["id"] != st.session_state.delete_id
+            ]
+            st.session_state.delete_id = None
+            st.experimental_rerun()
+
+        # Download CSV
         df_display = df.drop(columns=["id"])
         st.download_button("Download CSV", df_display.to_csv(index=False), file_name="inventory.csv", mime="text/csv")
 
