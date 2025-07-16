@@ -1,108 +1,106 @@
 import streamlit as st
 import pandas as pd
 import uuid
-import requests
-from io import StringIO
+import litellm
+from game.core import Agent, Environment, Tool
 
-# --- Gemini API KEY ---
-API_KEY = "AIzaSyBviI-5MF2edr6H8KLQ8mO6sPLy-DjTS64"
+# --- LiteLLM Gemini setup ---
+litellm.api_key = st.secrets["GEMINI_API_KEY"]
+litellm.model = "gemini/gemini-1.5-flash"
 
-# --- Page setup ---
-st.set_page_config(page_title="Accessory Inventory", page_icon="🎒")
+# --- Inventory Manager Class ---
+class InventoryManager:
+    def __init__(self):
+        if 'inventory_data' not in st.session_state:
+            st.session_state.inventory_data = []
 
-# --- Helper: Generate Unique ID
-def generate_id():
-    return str(uuid.uuid4())[:8]
-
-# --- Session state init ---
-if "inventory" not in st.session_state:
-    st.session_state.inventory = []
-
-# --- Sidebar: Add New Accessory ---
-with st.sidebar:
-    st.header("➕ Add New Accessory")
-    name = st.text_input("Accessory Name")
-    category = st.text_input("Category")
-    quantity = st.number_input("Quantity", min_value=1, step=1)
-    location = st.text_input("Location")
-    description = st.text_area("Description")
-    add_button = st.button("Add Accessory")
-
-    if add_button and name:
-        st.session_state.inventory.append({
-            "id": generate_id(),
-            "Name": name,
+    def add_item(self, category, item_name, quantity, description):
+        item_id = str(uuid.uuid4())
+        st.session_state.inventory_data.append({
+            "ID": item_id,
             "Category": category,
+            "Item Name": item_name,
             "Quantity": quantity,
-            "Location": location,
             "Description": description
         })
-        st.success(f"'{name}' added!")
 
-# --- Inventory Table Section ---
-st.title("🎒 My Accessory Inventory")
+    def get_items(self):
+        return pd.DataFrame(st.session_state.inventory_data)
 
-df = pd.DataFrame(st.session_state.inventory)
+    def delete_item(self, item_id):
+        st.session_state.inventory_data = [item for item in st.session_state.inventory_data if item["ID"] != item_id]
 
-if not df.empty:
-    csv = df.drop(columns="id").to_csv(index=False)
-    st.download_button("📥 Download CSV", data=csv, file_name="my_accessories.csv", mime="text/csv")
+    def edit_item(self, item_id, category, item_name, quantity, description):
+        for item in st.session_state.inventory_data:
+            if item["ID"] == item_id:
+                item["Category"] = category
+                item["Item Name"] = item_name
+                item["Quantity"] = quantity
+                item["Description"] = description
 
-    # --- Editable Data Table ---
-    edited_df = st.data_editor(
-        df.drop(columns="id"),
-        key="data_editor",
-        num_rows="dynamic",
-        use_container_width=True,
-        hide_index=True,
-    )
 
-    # --- Update the inventory list from edited DataFrame ---
-    for i, row in edited_df.iterrows():
-        st.session_state.inventory[i].update(row.to_dict())
+# --- Initialize Manager ---
+manager = InventoryManager()
 
-    # --- Delete Buttons for Each Row ---
-    st.subheader("🗑️ Delete Accessory")
-    for i, item in enumerate(st.session_state.inventory):
-        col1, col2 = st.columns([5, 1])
-        with col1:
-            st.write(f"**{item['Name']}** - {item['Category']}")
-        with col2:
-            if st.button("❌", key=f"delete_{i}"):
-                deleted_item = st.session_state.inventory.pop(i)
-                st.warning(f"Deleted {deleted_item['Name']}")
-                st.experimental_rerun()
-else:
-    st.info("No accessories yet. Use the sidebar to add some.")
+# --- Sidebar Navigation ---
+page = st.sidebar.radio("Navigation", ["Add Item", "View Inventory", "Ask Agent"])
 
-# --- Ask the Agent Section ---
-st.markdown("---")
-st.subheader("🤖 Ask the Inventory Agent")
+st.title("🧳 Personal Accessories Inventory Manager")
 
-user_question = st.text_input("Ask anything about your accessories...")
+# --- Add Item Page ---
+if page == "Add Item":
+    st.subheader("➕ Add New Item")
+    category = st.selectbox("Category", ["Watch", "Shoes", "Wallet", "Perfume", "Other"])
+    item_name = st.text_input("Item Name")
+    quantity = st.number_input("Quantity", min_value=1, step=1)
+    description = st.text_area("Description")
+    if st.button("Add Item"):
+        manager.add_item(category, item_name, quantity, description)
+        st.success("Item added successfully!")
 
-if st.button("Ask Agent") and user_question:
-    # Send to Gemini API
-    response = requests.post(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
-        params={"key": API_KEY},
-        json={
-            "contents": [
-                {
-                    "parts": [
-                        {
-                            "text": f"You are an inventory assistant. Here's the data:\n{df.to_csv(index=False)}\n\nQuestion: {user_question}"
-                        }
-                    ]
-                }
-            ]
-        }
-    )
+# --- View Inventory Page ---
+elif page == "View Inventory":
+    st.subheader("📦 Current Inventory")
+    df = manager.get_items()
+    edited_df = df.copy()
 
-    if response.status_code == 200:
-        result = response.json()
-        answer = result['candidates'][0]['content']['parts'][0]['text']
-        st.success("Agent Response:")
-        st.write(answer)
+    if not df.empty:
+        for index, row in df.iterrows():
+            with st.expander(f"{row['Item Name']} - {row['Category']}"):
+                new_cat = st.selectbox("Edit Category", ["Watch", "Shoes", "Wallet", "Perfume", "Other"], index=["Watch", "Shoes", "Wallet", "Perfume", "Other"].index(row['Category']), key=f"cat_{row['ID']}")
+                new_name = st.text_input("Edit Item Name", row['Item Name'], key=f"name_{row['ID']}")
+                new_qty = st.number_input("Edit Quantity", value=int(row['Quantity']), key=f"qty_{row['ID']}")
+                new_desc = st.text_area("Edit Description", row['Description'], key=f"desc_{row['ID']}")
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("💾 Save", key=f"save_{row['ID']}"):
+                        manager.edit_item(row['ID'], new_cat, new_name, new_qty, new_desc)
+                        st.success("Item updated!")
+                with col2:
+                    if st.button("🗑️ Delete", key=f"delete_{row['ID']}"):
+                        manager.delete_item(row['ID'])
+                        st.warning("Item deleted.")
+
+        # CSV Download Option
+        st.download_button("⬇️ Download CSV", data=manager.get_items().to_csv(index=False), file_name="inventory.csv", mime="text/csv")
     else:
-        st.error("Failed to get response from the agent. Please check your API key.")
+        st.info("No items in your inventory yet.")
+
+# --- Ask Agent Page ---
+elif page == "Ask Agent":
+    st.subheader("💬 Ask Inventory Assistant")
+    user_question = st.text_area("Ask a question about your accessories inventory")
+    if st.button("Ask") and user_question:
+        df = manager.get_items()
+        if df.empty:
+            st.warning("Inventory is empty. Add items first.")
+        else:
+            from litellm import completion
+            response = completion(
+                messages=[
+                    {"role": "system", "content": "You are a personal accessories inventory assistant. Answer questions based on the data provided."},
+                    {"role": "user", "content": f"Inventory CSV:\n{df.to_csv(index=False)}\n\nQuestion: {user_question}"},
+                ]
+            )
+            st.success(response['choices'][0]['message']['content'])
