@@ -1,91 +1,74 @@
-import os
-import pandas as pd
 import streamlit as st
-from dotenv import load_dotenv
-from litellm import completion
+import pandas as pd
+import os
+import uuid
 
-# Load environment variables
-load_dotenv()
+# File to store inventory data
+INVENTORY_FILE = "inventory.csv"
 
-# Set LiteLLM Gemini model and API key
-from litellm import completion
-litellm_model = "gemini/gemini-1.5-flash"
-litellm_api_key = os.getenv("GEMINI_API_KEY") or "your-api-key-here"
+# Load existing inventory or create an empty DataFrame
+if os.path.exists(INVENTORY_FILE):
+    df = pd.read_csv(INVENTORY_FILE)
+else:
+    df = pd.DataFrame(columns=["id", "item", "category", "quantity", "price"])
+    df.to_csv(INVENTORY_FILE, index=False)
 
-# Initialize session state
-if "inventory" not in st.session_state:
-    st.session_state.inventory = []
+# Save to CSV
+def save_inventory(df):
+    df.to_csv(INVENTORY_FILE, index=False)
 
-# Sidebar navigation
-st.sidebar.title("Inventory Manager")
-page = st.sidebar.radio("Navigation", ["Add Inventory", "View Inventory", "Ask Agent"])
+st.set_page_config(page_title="Inventory Manager", layout="centered")
+st.title("📦 Inventory Manager")
 
-# Add Inventory Page
-if page == "Add Inventory":
-    st.header("Add Inventory Item")
+# Section: Add New Inventory Item
+st.header("➕ Add Inventory Item")
+with st.form("add_item_form"):
     item = st.text_input("Item Name")
     category = st.text_input("Category")
-    quantity = st.number_input("Quantity", min_value=0, format="%d")
-    price = st.number_input("Price", min_value=0.0, format="%0.2f")
-    if st.button("Add Item"):
-        st.session_state.inventory.append({
-            "item": item,
-            "category": category,
+    quantity = st.number_input("Quantity", min_value=1, step=1)
+    price = st.number_input("Price ($)", min_value=0.0, step=0.01, format="%.2f")
+    submitted = st.form_submit_button("Add Item")
+    if submitted:
+        new_id = str(uuid.uuid4())
+        new_item = {
+            "id": new_id,
+            "item": item.strip(),
+            "category": category.strip(),
             "quantity": quantity,
             "price": price
-        })
-        st.success("Item added successfully!")
+        }
+        df = pd.concat([df, pd.DataFrame([new_item])], ignore_index=True)
+        save_inventory(df)
+        st.success(f"{item} added to inventory.")
 
-# View Inventory Page
-elif page == "View Inventory":
-    st.header("View & Manage Inventory")
-    if not st.session_state.inventory:
-        st.info("No items in inventory.")
-    else:
-        df = pd.DataFrame(st.session_state.inventory)
+# Section: View Inventory Table
+st.header("📋 View & Manage Inventory")
 
-        st.markdown("## Inventory Items")
-        table_md = "| Item | Category | Quantity | Price |
-|------|----------|----------|--------|"
-        for i, row in df.iterrows():
-            table_md += f"\n| {row['item']} | {row['category']} | {int(row['quantity'])} | ${float(row['price']):.2f} |"
-        st.markdown(table_md)
+if df.empty:
+    st.info("No items in inventory yet.")
+else:
+    # Display markdown table
+    table_md = "| Item | Category | Quantity | Price ($) | Actions |\n"
+    table_md += "|------|----------|----------|------------|---------|\n"
 
-        for i, row in df.iterrows():
-            col1, col2 = st.columns([5, 1])
-            with col1:
-                st.write(f"{row['item']} ({row['category']}) - Qty: {int(row['quantity'])} - ${float(row['price']):.2f}")
-            with col2:
-                if st.button("Delete", key=f"del_{i}"):
-                    st.session_state.inventory.pop(i)
-                    st.rerun()
+    for index, row in df.iterrows():
+        item_name = row["item"]
+        category = row["category"]
+        quantity = int(row["quantity"])
+        price = float(row["price"])
+        delete_key = f"delete_{row['id']}"
 
-# Ask Agent Page
-elif page == "Ask Agent":
-    st.header("Ask Inventory Agent")
-    user_question = st.text_area("Enter your question about the inventory:")
+        table_md += f"| {item_name} | {category} | {quantity} | ${price:.2f} | "
 
-    if st.button("Ask Agent") and user_question:
-        df = pd.DataFrame(st.session_state.inventory)
-        if df.empty:
-            st.warning("Inventory is empty. Please add items first.")
-        else:
-            data_csv = df.to_csv(index=False)
-            prompt = f"""
-You are an inventory assistant.
-Here's my inventory data:
-{data_csv}
+        # Add delete button inline
+        delete_col = st.columns([1, 1, 1, 1, 1])[4]
+        with delete_col:
+            if st.button("Delete", key=delete_key):
+                df = df[df["id"] != row["id"]]
+                save_inventory(df)
+                st.experimental_rerun()
 
-Answer the following question based on the data:
-{user_question}
-"""
-            try:
-                response = completion(
-                    model=litellm_model,
-                    messages=[{"role": "user", "content": prompt}],
-                    api_key=litellm_api_key
-                )
-                st.success("Agent Response:")
-                st.write(response['choices'][0]['message']['content'])
-            except Exception as e:
-                st.error(f"Error: {e}")
+        table_md += "⬅️ Click Button\n"
+
+    st.markdown(table_md)
+
