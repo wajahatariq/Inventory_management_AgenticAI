@@ -1,78 +1,102 @@
-import streamlit as st
-import litellm
-import os
-
-# Setup your Gemini model here using LiteLLM
-litellm.model = "gemini/gemini-1.5-flash"
+# inventory_agent_app.py
 
 import streamlit as st
-litellm.api_key = st.secrets["GEMINI_API_KEY"]
+import pandas as pd
+from inventory_management import InventoryManager
 
-# ---- Memory store ----
-if "inventory" not in st.session_state:
-    st.session_state.inventory = []
+# Streamlit page setup
+st.set_page_config(
+    page_title="Accessories Tracker",
+    page_icon="👜",
+    layout="centered"
+)
 
-# ---- LLM Call Function ----
-def ask_gemini(message):
-    try:
-        response = litellm.completion(
-            model=litellm.model,
-            messages=[
-                {"role": "system", "content": "You are a helpful inventory management assistant."},
-                {"role": "user", "content": message}
-            ]
-        )
-        return response.choices[0].message["content"]
-    except Exception as e:
-        return f"❌ Error: {str(e)}"
+# Initialize inventory manager
+if "inventory_manager" not in st.session_state:
+    st.session_state.inventory_manager = InventoryManager()
 
-# ---- Streamlit App UI ----
-st.set_page_config(page_title="Inventory Agent", page_icon="📦")
-st.title("📦 Inventory Management Agent")
+inventory = st.session_state.inventory_manager
 
-menu = st.sidebar.radio("Choose action", ["View Inventory", "Add Item", "Search Item", "Ask Agent"])
+# Title
+st.title("👜 Personal Accessories Tracker")
 
-# View Inventory
-if menu == "View Inventory":
-    st.subheader("📋 Current Inventory")
-    if st.session_state.inventory:
-        st.table(st.session_state.inventory)
-    else:
-        st.info("No items in inventory yet.")
-
-# Add Item
-elif menu == "Add Item":
-    st.subheader("➕ Add New Item")
+# Add Accessory Form
+st.header("➕ Add New Accessory")
+with st.form("add_form"):
     name = st.text_input("Item Name")
-    quantity = st.number_input("Quantity", min_value=1, step=1)
-    category = st.text_input("Category")
+    quantity = st.number_input("Quantity", min_value=0, step=1)
+    category = st.text_input("Category (e.g., Ring, Watch, Sunglasses)")
+    location = st.text_input("Location (e.g., Drawer, Closet)")
+    price = st.number_input("Estimated Price (PKR)", min_value=0.0, step=0.1)
 
-    if st.button("Add to Inventory"):
-        new_item = {"Name": name, "Quantity": quantity, "Category": category}
-        st.session_state.inventory.append(new_item)
-        st.success(f"Item '{name}' added!")
+    submitted = st.form_submit_button("Add Accessory")
 
-# Search Item
-elif menu == "Search Item":
-    st.subheader("🔍 Search Inventory")
-    search_query = st.text_input("Search by name or category")
-
-    if st.button("Search"):
-        result = [item for item in st.session_state.inventory if search_query.lower() in item["Name"].lower() or search_query.lower() in item["Category"].lower()]
-        if result:
-            st.table(result)
+    if submitted:
+        if name:
+            item = {
+                "name": name,
+                "quantity": quantity,
+                "category": category,
+                "location": location,
+                "price": price
+            }
+            inventory.add_item(item)
+            st.success(f"✅ '{name}' added to inventory!")
         else:
-            st.warning("No matching items found.")
+            st.error("Item Name is required!")
 
-# Ask LLM Agent
-elif menu == "Ask Agent":
-    st.subheader("🤖 Ask Inventory Assistant")
-    user_input = st.text_area("Ask anything about inventory (e.g., 'How many laptops do we have?')")
+# Show Inventory
+st.header("📋 My Accessories")
+items = inventory.get_inventory()
 
-    if st.button("Get Response"):
-        # Format the inventory data for LLM context
-        inventory_context = "\n".join([f"{i['Quantity']} x {i['Name']} ({i['Category']})" for i in st.session_state.inventory])
-        prompt = f"""Here's our current inventory:\n{inventory_context}\n\nQuestion: {user_input}"""
+if not items:
+    st.info("No accessories in your inventory yet.")
+else:
+    for idx, item in enumerate(items):
+        with st.expander(f"🧾 {item['name']}"):
+            st.markdown(f"""
+            - **Quantity**: {item['quantity']}
+            - **Category**: {item['category']}
+            - **Location**: {item['location']}
+            - **Price**: PKR {item['price']:.2f}
+            """)
 
-        answer = ask_gemini(prompt)
-        st.success(answer)
+            # Edit form
+            with st.form(f"edit_form_{idx}"):
+                new_name = st.text_input("Edit Name", item["name"], key=f"name_{idx}")
+                new_quantity = st.number_input("Edit Quantity", value=item["quantity"], min_value=0, key=f"qty_{idx}")
+                new_category = st.text_input("Edit Category", item["category"], key=f"cat_{idx}")
+                new_location = st.text_input("Edit Location", item["location"], key=f"loc_{idx}")
+                new_price = st.number_input("Edit Price", value=float(item["price"]), min_value=0.0, key=f"price_{idx}")
+
+                update = st.form_submit_button("Update Accessory")
+                if update:
+                    updated_item = {
+                        "name": new_name,
+                        "quantity": new_quantity,
+                        "category": new_category,
+                        "location": new_location,
+                        "price": new_price
+                    }
+                    inventory.update_item(idx, updated_item)
+                    st.success("✅ Updated successfully!")
+                    st.experimental_rerun()
+
+            # Delete button
+            if st.button(f"🗑️ Delete '{item['name']}'", key=f"delete_{idx}"):
+                inventory.delete_item(idx)
+                st.warning(f"'{item['name']}' deleted from inventory.")
+                st.experimental_rerun()
+
+# CSV Download
+st.header("📤 Export Inventory")
+
+if items:
+    df = pd.DataFrame(items)
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="⬇️ Download as CSV",
+        data=csv,
+        file_name="accessories_inventory.csv",
+        mime="text/csv"
+    )
