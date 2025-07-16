@@ -9,8 +9,6 @@ GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
 st.set_page_config(page_title="Inventory Manager", layout="wide")
 
-st.set_page_config(page_title="Inventory Manager", layout="wide")
-
 DATA_FILE = "inventory.csv"
 
 def load_data():
@@ -27,7 +25,14 @@ df = load_data()
 # Sidebar Navigation
 st.sidebar.title("Inventory Management")
 pages = ["Add Item", "View Inventory", "Ask the Agent"]
+
+# Clear chat history when switching pages
+if "last_page" not in st.session_state:
+    st.session_state.last_page = pages[0]
 page = st.sidebar.radio("Go to", pages)
+if page != st.session_state.last_page:
+    st.session_state.chat_history = []
+    st.session_state.last_page = page
 
 # Add Item Page
 if page == "Add Item":
@@ -57,10 +62,8 @@ if page == "Add Item":
 # View Inventory Page
 elif page == "View Inventory":
     st.header("📋 View & Manage Inventory")
-
     st.markdown("### Inventory Items")
 
-    # Display table with delete button per row
     for idx, row in df.iterrows():
         cols = st.columns([2, 2, 1, 1, 1])
         cols[0].markdown(f"**{row['item']}**")
@@ -85,7 +88,6 @@ elif page == "Ask the Agent":
     if user_input:
         st.session_state.chat_history.append({"role": "user", "content": user_input})
 
-        # Build inventory summary
         inventory_summary = ""
         for i, row in df.iterrows():
             inventory_summary += f"- {row['item']} ({row['category']}): {row['quantity']} units at ${row['price']}\n"
@@ -116,5 +118,4 @@ Answer this user query briefly and helpfully:
         st.session_state.chat_history.append({"role": "assistant", "content": reply})
 
     for msg in st.session_state.chat_history:
-        speaker = "🧑" if msg["role"] == "user" else "🤖"
-        st.markdown(f"**{speaker} {msg['role'].capitalize()}:** {msg['content']}")
+        st.markdown(f"**{msg['role'].capitalize()}:** {msg['content']}")
