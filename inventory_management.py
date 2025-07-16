@@ -64,9 +64,18 @@ elif page == "View Inventory":
     st.header("📋 View & Manage Inventory")
     st.markdown("### Inventory Items")
 
+    # Headings for the table
+    header_cols = st.columns([2, 2, 1, 1, 1])
+    header_cols[0].markdown("**Item**")
+    header_cols[1].markdown("**Category**")
+    header_cols[2].markdown("**Quantity**")
+    header_cols[3].markdown("**Price**")
+    header_cols[4].markdown("**Action**")
+
+    # Display each item row
     for idx, row in df.iterrows():
         cols = st.columns([2, 2, 1, 1, 1])
-        cols[0].markdown(f"**{row['item']}**")
+        cols[0].markdown(row['item'])
         cols[1].markdown(row['category'])
         cols[2].markdown(str(row['quantity']))
         cols[3].markdown(f"${row['price']:.2f}")
@@ -77,7 +86,6 @@ elif page == "View Inventory":
             st.success(f"Deleted {row['item']} from inventory.")
             st.experimental_rerun()
 
-# Ask the Agent Page
 # Ask the Agent Page
 elif page == "Ask the Agent":
     st.header("Ask the Inventory Agent")
