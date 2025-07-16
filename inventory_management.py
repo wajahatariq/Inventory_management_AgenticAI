@@ -1,106 +1,108 @@
 import streamlit as st
 import pandas as pd
-import uuid
 import litellm
-from game.core import Agent, Environment, Tool
+import os
+from uuid import uuid4
 
-# --- LiteLLM Gemini setup ---
+# Set up LiteLLM with API Key from Streamlit secrets
 litellm.api_key = st.secrets["GEMINI_API_KEY"]
 litellm.model = "gemini/gemini-1.5-flash"
 
-# --- Inventory Manager Class ---
-class InventoryManager:
-    def __init__(self):
-        if 'inventory_data' not in st.session_state:
-            st.session_state.inventory_data = []
+# ---------- Session State Initialization ----------
+if "inventory" not in st.session_state:
+    st.session_state.inventory = []
+if "editing_id" not in st.session_state:
+    st.session_state.editing_id = None
 
-    def add_item(self, category, item_name, quantity, description):
-        item_id = str(uuid.uuid4())
-        st.session_state.inventory_data.append({
-            "ID": item_id,
-            "Category": category,
-            "Item Name": item_name,
-            "Quantity": quantity,
-            "Description": description
+# ---------- Sidebar Navigation ----------
+st.sidebar.title("📦 Inventory Manager")
+selection = st.sidebar.radio("Go to:", ["Add Item", "View Inventory", "Ask Agent"])
+
+# ---------- Add Item Page ----------
+if selection == "Add Item":
+    st.header("➕ Add New Inventory Item")
+    with st.form("add_item_form"):
+        name = st.text_input("Item Name")
+        category = st.text_input("Category")
+        quantity = st.number_input("Quantity", min_value=1, step=1)
+        price = st.number_input("Price (per unit)", min_value=0.0, step=0.01)
+        submit = st.form_submit_button("Add Item")
+
+    if submit and name and category:
+        st.session_state.inventory.append({
+            "id": str(uuid4()),
+            "name": name,
+            "category": category,
+            "quantity": quantity,
+            "price": price
         })
-
-    def get_items(self):
-        return pd.DataFrame(st.session_state.inventory_data)
-
-    def delete_item(self, item_id):
-        st.session_state.inventory_data = [item for item in st.session_state.inventory_data if item["ID"] != item_id]
-
-    def edit_item(self, item_id, category, item_name, quantity, description):
-        for item in st.session_state.inventory_data:
-            if item["ID"] == item_id:
-                item["Category"] = category
-                item["Item Name"] = item_name
-                item["Quantity"] = quantity
-                item["Description"] = description
-
-
-# --- Initialize Manager ---
-manager = InventoryManager()
-
-# --- Sidebar Navigation ---
-page = st.sidebar.radio("Navigation", ["Add Item", "View Inventory", "Ask Agent"])
-
-st.title("🧳 Personal Accessories Inventory Manager")
-
-# --- Add Item Page ---
-if page == "Add Item":
-    st.subheader("➕ Add New Item")
-    category = st.selectbox("Category", ["Watch", "Shoes", "Wallet", "Perfume", "Other"])
-    item_name = st.text_input("Item Name")
-    quantity = st.number_input("Quantity", min_value=1, step=1)
-    description = st.text_area("Description")
-    if st.button("Add Item"):
-        manager.add_item(category, item_name, quantity, description)
         st.success("Item added successfully!")
 
-# --- View Inventory Page ---
-elif page == "View Inventory":
-    st.subheader("📦 Current Inventory")
-    df = manager.get_items()
-    edited_df = df.copy()
+# ---------- View Inventory Page ----------
+elif selection == "View Inventory":
+    st.header("📋 View & Manage Inventory")
+    df = pd.DataFrame(st.session_state.inventory)
 
     if not df.empty:
-        for index, row in df.iterrows():
-            with st.expander(f"{row['Item Name']} - {row['Category']}"):
-                new_cat = st.selectbox("Edit Category", ["Watch", "Shoes", "Wallet", "Perfume", "Other"], index=["Watch", "Shoes", "Wallet", "Perfume", "Other"].index(row['Category']), key=f"cat_{row['ID']}")
-                new_name = st.text_input("Edit Item Name", row['Item Name'], key=f"name_{row['ID']}")
-                new_qty = st.number_input("Edit Quantity", value=int(row['Quantity']), key=f"qty_{row['ID']}")
-                new_desc = st.text_area("Edit Description", row['Description'], key=f"desc_{row['ID']}")
+        edited_row = None
+        for idx, row in df.iterrows():
+            col1, col2, col3 = st.columns([4, 1, 1])
+            with col1:
+                st.markdown(f"**{row['name']}** - {row['category']} | Qty: {row['quantity']} | ${row['price']:.2f}")
+            with col2:
+                if st.button("✏️", key=f"edit_{row['id']}"):
+                    st.session_state.editing_id = row['id']
+            with col3:
+                if st.button("🗑️", key=f"delete_{row['id']}"):
+                    st.session_state.inventory = [item for item in st.session_state.inventory if item['id'] != row['id']]
+                    st.experimental_rerun()
 
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("💾 Save", key=f"save_{row['ID']}"):
-                        manager.edit_item(row['ID'], new_cat, new_name, new_qty, new_desc)
-                        st.success("Item updated!")
-                with col2:
-                    if st.button("🗑️ Delete", key=f"delete_{row['ID']}"):
-                        manager.delete_item(row['ID'])
-                        st.warning("Item deleted.")
+            if st.session_state.editing_id == row['id']:
+                with st.form(f"edit_form_{row['id']}"):
+                    new_name = st.text_input("Item Name", row['name'])
+                    new_category = st.text_input("Category", row['category'])
+                    new_quantity = st.number_input("Quantity", value=row['quantity'], min_value=1, step=1)
+                    new_price = st.number_input("Price", value=row['price'], min_value=0.0, step=0.01)
+                    save = st.form_submit_button("Save")
+                if save:
+                    for item in st.session_state.inventory:
+                        if item['id'] == row['id']:
+                            item.update({
+                                "name": new_name,
+                                "category": new_category,
+                                "quantity": new_quantity,
+                                "price": new_price
+                            })
+                            st.session_state.editing_id = None
+                            st.success("Item updated successfully!")
+                            st.experimental_rerun()
 
-        # CSV Download Option
-        st.download_button("⬇️ Download CSV", data=manager.get_items().to_csv(index=False), file_name="inventory.csv", mime="text/csv")
+        # CSV Download Button
+        st.download_button("📥 Download CSV", df.to_csv(index=False), file_name="inventory.csv", mime="text/csv")
     else:
-        st.info("No items in your inventory yet.")
+        st.info("No items in inventory.")
 
-# --- Ask Agent Page ---
-elif page == "Ask Agent":
-    st.subheader("💬 Ask Inventory Assistant")
-    user_question = st.text_area("Ask a question about your accessories inventory")
-    if st.button("Ask") and user_question:
-        df = manager.get_items()
-        if df.empty:
-            st.warning("Inventory is empty. Add items first.")
-        else:
-            from litellm import completion
-            response = completion(
+# ---------- Ask Agent Page ----------
+elif selection == "Ask Agent":
+    st.header("🧠 Ask Inventory Agent")
+    user_question = st.text_area("What do you want to know about your inventory?")
+    ask = st.button("Ask Agent")
+
+    if ask and user_question:
+        df = pd.DataFrame(st.session_state.inventory)
+        data_csv = df.to_csv(index=False)
+
+        try:
+            response = litellm.completion(
                 messages=[
-                    {"role": "system", "content": "You are a personal accessories inventory assistant. Answer questions based on the data provided."},
-                    {"role": "user", "content": f"Inventory CSV:\n{df.to_csv(index=False)}\n\nQuestion: {user_question}"},
+                    {"role": "system", "content": "You are an intelligent assistant that helps analyze and answer questions about a user's inventory."},
+                    {"role": "user", "content": f"Here's my inventory data:
+{data_csv}
+
+Question: {user_question}"}
                 ]
             )
-            st.success(response['choices'][0]['message']['content'])
+            agent_reply = response["choices"][0]["message"]["content"]
+            st.success(agent_reply)
+        except Exception as e:
+            st.error(f"Agent error: {str(e)}")
