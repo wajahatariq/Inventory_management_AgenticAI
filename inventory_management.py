@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-from inventory_management import InventoryManager
+from InventoryManagement import InventoryManager
 
 # Streamlit page setup
 st.set_page_config(
