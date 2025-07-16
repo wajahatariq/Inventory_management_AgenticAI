@@ -4,21 +4,21 @@ import litellm
 import os
 from uuid import uuid4
 
-# --- Set up LiteLLM with API Key from Streamlit secrets ---
+# Set up LiteLLM with API Key from Streamlit secrets
 litellm.api_key = st.secrets["GEMINI_API_KEY"]
 litellm.model = "gemini/gemini-1.5-flash"
 
-# --- Initialize Session State ---
+# ---------- Session State Initialization ----------
 if "inventory" not in st.session_state:
     st.session_state.inventory = []
 if "editing_id" not in st.session_state:
     st.session_state.editing_id = None
 
-# --- Sidebar Navigation ---
+# ---------- Sidebar Navigation ----------
 st.sidebar.title("📦 Inventory Manager")
 selection = st.sidebar.radio("Go to:", ["Add Item", "View Inventory", "Ask Agent"])
 
-# --- Add Item Page ---
+# ---------- Add Item Page ----------
 if selection == "Add Item":
     st.header("➕ Add New Inventory Item")
     with st.form("add_item_form"):
@@ -38,31 +38,33 @@ if selection == "Add Item":
         })
         st.success("Item added successfully!")
 
-# --- View Inventory Page ---
+# ---------- View Inventory Page ----------
 elif selection == "View Inventory":
     st.header("📋 View & Manage Inventory")
     df = pd.DataFrame(st.session_state.inventory)
 
     if not df.empty:
-        # Table headers
-        st.markdown("### Inventory Items")
         for idx, row in df.iterrows():
-            col1, col2, col3, col4, col5, col6 = st.columns([3, 2, 2, 2, 1, 1])
+            col1, col2, col3, col4, col5 = st.columns([2, 2, 1, 1, 2])
             with col1:
-                st.markdown(f"**{row['name']}**")
+                st.markdown(f"**{row.get('name', '—')}**")
             with col2:
-                st.markdown(row['category'])
+                st.markdown(f"*{row.get('category', '—')}*")
             with col3:
-                st.markdown(f"{int(row['quantity'])}")
+                qty = row.get('quantity')
+                st.markdown(f"{int(qty) if pd.notna(qty) else '—'}")
             with col4:
-                st.markdown(f"${row['price']:.2f}")
+                price = row.get('price')
+                st.markdown(f"${price:.2f}" if pd.notna(price) else "—")
             with col5:
-                if st.button("✏️", key=f"edit_{row['id']}"):
-                    st.session_state.editing_id = row['id']
-            with col6:
-                if st.button("🗑️", key=f"delete_{row['id']}"):
-                    st.session_state.inventory = [item for item in st.session_state.inventory if item['id'] != row['id']]
-                    st.experimental_rerun()
+                colA, colB = st.columns([1, 1])
+                with colA:
+                    if st.button("✏️", key=f"edit_{row['id']}"):
+                        st.session_state.editing_id = row['id']
+                with colB:
+                    if st.button("🗑️", key=f"delete_{row['id']}"):
+                        st.session_state.inventory = [item for item in st.session_state.inventory if item['id'] != row['id']]
+                        st.experimental_rerun()
 
             if st.session_state.editing_id == row['id']:
                 with st.form(f"edit_form_{row['id']}"):
@@ -84,12 +86,12 @@ elif selection == "View Inventory":
                             st.success("Item updated successfully!")
                             st.experimental_rerun()
 
-        # CSV download button
+        # CSV Download Button
         st.download_button("📥 Download CSV", df.to_csv(index=False), file_name="inventory.csv", mime="text/csv")
     else:
-        st.info("No items in inventory yet.")
+        st.info("No items in inventory.")
 
-# --- Ask Agent Page ---
+# ---------- Ask Agent Page ----------
 elif selection == "Ask Agent":
     st.header("🧠 Ask Inventory Agent")
     user_question = st.text_area("What do you want to know about your inventory?")
@@ -103,13 +105,10 @@ elif selection == "Ask Agent":
             response = litellm.completion(
                 messages=[
                     {"role": "system", "content": "You are an intelligent assistant that helps analyze and answer questions about a user's inventory."},
-                    {"role": "user", "content": f"""Here's my inventory data:
-{data_csv}
-
-Question: {user_question}"""}
+                    {"role": "user", "content": f"Here's my inventory data:\n{data_csv}\n\nQuestion: {user_question}"}
                 ]
             )
-            reply = response["choices"][0]["message"]["content"]
-            st.success(reply)
+            agent_reply = response["choices"][0]["message"]["content"]
+            st.success(agent_reply)
         except Exception as e:
             st.error(f"Agent error: {str(e)}")
