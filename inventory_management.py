@@ -44,21 +44,29 @@ elif selection == "View Inventory":
     df = pd.DataFrame(st.session_state.inventory)
 
     if not df.empty:
-        df_display = df.drop(columns=["id"])
-        st.dataframe(df_display.rename(columns={
-            "name": "Name",
-            "category": "Category",
-            "quantity": "Quantity",
-            "price": "Price"
-        }), use_container_width=True)
+        st.write("### Inventory Items")
+        columns = st.columns([3, 3, 2, 2, 2])  # Name, Category, Qty, Price, Delete
 
-        # Show delete button after table
-        for item in st.session_state.inventory:
-            if st.button(f"🗑️ Delete {item['name']}", key=f"delete_{item['id']}"):
-                st.session_state.inventory = [i for i in st.session_state.inventory if i['id'] != item['id']]
+        columns[0].markdown("**Name**")
+        columns[1].markdown("**Category**")
+        columns[2].markdown("**Quantity**")
+        columns[3].markdown("**Price**")
+        columns[4].markdown("**Action**")
+
+        for idx, row in df.iterrows():
+            col1, col2, col3, col4, col5 = st.columns([3, 3, 2, 2, 2])
+            col1.markdown(row["name"])
+            col2.markdown(row["category"])
+            col3.markdown(f"{int(row['quantity'])}")
+            col4.markdown(f"${float(row['price']):.2f}")
+            if col5.button("🗑️ Delete", key=f"del_{row['id']}"):
+                st.session_state.inventory = [i for i in st.session_state.inventory if i["id"] != row["id"]]
                 st.experimental_rerun()
 
+        # CSV Download
+        df_display = df.drop(columns=["id"])
         st.download_button("Download CSV", df_display.to_csv(index=False), file_name="inventory.csv", mime="text/csv")
+
     else:
         st.info("No items in inventory.")
 
@@ -84,4 +92,3 @@ elif selection == "Ask Agent":
             st.success(agent_reply)
         except Exception as e:
             st.error(f"Agent error: {str(e)}")
-
