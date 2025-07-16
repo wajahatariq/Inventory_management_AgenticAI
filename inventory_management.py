@@ -3,7 +3,11 @@ import pandas as pd
 import os
 import uuid
 import litellm
-from userdata import GEMINI_API_KEY
+
+# Use Streamlit secrets for Gemini key
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+
+st.set_page_config(page_title="Inventory Manager", layout="wide")
 
 st.set_page_config(page_title="Inventory Manager", layout="wide")
 
