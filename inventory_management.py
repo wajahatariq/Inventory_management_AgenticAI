@@ -13,6 +13,8 @@ if "inventory" not in st.session_state:
     st.session_state.inventory = []
 if "delete_id" not in st.session_state:
     st.session_state.delete_id = None
+if "changed" not in st.session_state:
+    st.session_state.changed = False
 
 # ---------- Sidebar Navigation ----------
 st.sidebar.title("Inventory Manager")
@@ -61,16 +63,18 @@ elif selection == "View Inventory":
             col4.markdown(f"${float(row['price']):.2f}")
             if col5.button("Delete", key=f"del_{row['id']}"):
                 st.session_state.delete_id = row["id"]
+                st.session_state.changed = True
 
-        # Handle Deletion After Loop
-        if st.session_state.delete_id:
+        # Handle Deletion After Rendering
+        if st.session_state.changed and st.session_state.delete_id:
             st.session_state.inventory = [
-                i for i in st.session_state.inventory if i["id"] != st.session_state.delete_id
+                item for item in st.session_state.inventory if item["id"] != st.session_state.delete_id
             ]
             st.session_state.delete_id = None
-            st.experimental_rerun()
+            st.session_state.changed = False
+            # Let Streamlit naturally rerun due to session_state change
 
-        # Download CSV
+        # Download CSV (excluding ID)
         df_display = df.drop(columns=["id"])
         st.download_button("Download CSV", df_display.to_csv(index=False), file_name="inventory.csv", mime="text/csv")
 
