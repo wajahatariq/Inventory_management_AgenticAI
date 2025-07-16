@@ -78,6 +78,7 @@ elif page == "View Inventory":
             st.experimental_rerun()
 
 # Ask the Agent Page
+# Ask the Agent Page
 elif page == "Ask the Agent":
     st.header("Ask the Inventory Agent")
     user_input = st.text_input("Ask anything about the inventory...")
@@ -88,6 +89,7 @@ elif page == "Ask the Agent":
     if user_input:
         st.session_state.chat_history.append({"role": "user", "content": user_input})
 
+        # Build inventory summary
         inventory_summary = ""
         for i, row in df.iterrows():
             inventory_summary += f"- {row['item']} ({row['category']}): {row['quantity']} units at ${row['price']}\n"
@@ -115,7 +117,6 @@ Answer this user query briefly and helpfully:
         except Exception as e:
             reply = f"Error: {str(e)}"
 
-        st.session_state.chat_history.append({"role": "assistant", "content": reply})
+        # Only show the latest assistant reply
+        st.markdown(reply)
 
-    for msg in st.session_state.chat_history:
-            st.markdown(msg["content"])
