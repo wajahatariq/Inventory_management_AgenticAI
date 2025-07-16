@@ -118,4 +118,7 @@ Answer this user query briefly and helpfully:
         st.session_state.chat_history.append({"role": "assistant", "content": reply})
 
     for msg in st.session_state.chat_history:
-        st.markdown(f"**{msg['role'].capitalize()}:** {msg['content']}")
+        if msg["role"] == "user":
+            st.markdown(f"**You:** {msg['content']}")
+        else:
+            st.markdown(msg["content"])
