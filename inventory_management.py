@@ -40,27 +40,25 @@ if selection == "Add Item":
 
 # ---------- View Inventory Page ----------
 elif selection == "View Inventory":
-    st.header("View & Manage Inventory")
+    st.header("📋 View & Manage Inventory")
     df = pd.DataFrame(st.session_state.inventory)
 
     if not df.empty:
-        # Drop ID column for display and CSV
-        display_df = df.drop(columns=["id"])
+        df_display = df.drop(columns=["id"])
+        st.dataframe(df_display.rename(columns={
+            "name": "Name",
+            "category": "Category",
+            "quantity": "Quantity",
+            "price": "Price"
+        }), use_container_width=True)
 
         for idx, row in df.iterrows():
-            col1, col2, col3 = st.columns([4, 1, 1])
+            col1, col2 = st.columns([1, 1])
             with col1:
-                st.markdown(
-                    f"**{row['name']}**\n\n"
-                    f"{row['category']}\n\n"
-                    f"{int(row['quantity'])}\n\n"
-                    f"${row['price']:.2f}"
-                )
-            with col2:
-                if st.button("✏️", key=f"edit_{row['id']}"):
+                if st.button("✏️ Edit", key=f"edit_{row['id']}"):
                     st.session_state.editing_id = row['id']
-            with col3:
-                if st.button("🗑️", key=f"delete_{row['id']}"):
+            with col2:
+                if st.button("🗑️ Delete", key=f"delete_{row['id']}"):
                     st.session_state.inventory = [item for item in st.session_state.inventory if item['id'] != row['id']]
                     st.experimental_rerun()
 
@@ -84,7 +82,7 @@ elif selection == "View Inventory":
                             st.success("Item updated successfully!")
                             st.experimental_rerun()
 
-        st.download_button("Download CSV", display_df.to_csv(index=False), file_name="inventory.csv", mime="text/csv")
+        st.download_button("Download CSV", df_display.to_csv(index=False), file_name="inventory.csv", mime="text/csv")
     else:
         st.info("No items in inventory.")
 
@@ -110,4 +108,3 @@ elif selection == "Ask Agent":
             st.success(agent_reply)
         except Exception as e:
             st.error(f"Agent error: {str(e)}")
-
