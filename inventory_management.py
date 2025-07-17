@@ -84,7 +84,7 @@ elif page == "View Inventory":
             df = df[df['id'] != row['id']]
             save_data(df)
             st.success(f"Deleted {row['item']} from inventory.")
-            st.experimental_rerun()
+            st.rerun()
 
 # Ask the Agent Page
 elif page == "Ask the Agent":
