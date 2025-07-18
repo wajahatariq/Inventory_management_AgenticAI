@@ -105,21 +105,26 @@ elif page == "Ask the Agent":
     if user_input:
         st.session_state.chat_history.append({"role": "user", "content": user_input})
 
-        # Build inventory summary
-        inventory_summary = ""
-        for i, row in df.iterrows():
-            inventory_summary += f"- {row['item']} ({row['category']}): {row['quantity']} units at ${row['price']}\n"
+        # 🔍 Check if inventory is empty
+        if df.empty:
+            inventory_summary = "The inventory is currently empty."
+        else:
+            inventory_summary = ""
+            for _, row in df.iterrows():
+                inventory_summary += f"- {row['item']} ({row['category']}): {row['quantity']} units at ${row['price']:.2f}\n"
 
+        # 🧠 Construct the prompt
         prompt = f"""
 You are an expert inventory assistant.
 
 Here is the current inventory:
 {inventory_summary}
 
-Answer this user query briefly and helpfully:
+Now answer the following user query clearly:
 "{user_input}"
         """
 
+        # 🧠 Call Gemini
         try:
             litellm.api_key = GEMINI_API_KEY
             response = litellm.completion(
@@ -133,6 +138,4 @@ Answer this user query briefly and helpfully:
         except Exception as e:
             reply = f"Error: {str(e)}"
 
-        # Only show the latest assistant reply
         st.markdown(reply)
-
