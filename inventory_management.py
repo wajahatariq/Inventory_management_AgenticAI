@@ -64,7 +64,16 @@ elif page == "View Inventory":
     st.header("📋 View & Manage Inventory")
     st.markdown("### Inventory Items")
 
-    # Headings for the table
+    # 📥 Download Button
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Download Inventory as CSV",
+        data=csv,
+        file_name='inventory.csv',
+        mime='text/csv',
+    )
+
+    # Table Headers
     header_cols = st.columns([2, 2, 1, 1, 1])
     header_cols[0].markdown("**Item**")
     header_cols[1].markdown("**Category**")
@@ -72,7 +81,7 @@ elif page == "View Inventory":
     header_cols[3].markdown("**Price**")
     header_cols[4].markdown("**Action**")
 
-    # Display each item row
+    # Display Inventory Items
     for idx, row in df.iterrows():
         cols = st.columns([2, 2, 1, 1, 1])
         cols[0].markdown(row['item'])
@@ -85,7 +94,6 @@ elif page == "View Inventory":
             save_data(df)
             st.success(f"Deleted {row['item']} from inventory.")
             st.rerun()
-
 # Ask the Agent Page
 elif page == "Ask the Agent":
     st.header("Ask the Inventory Agent")
