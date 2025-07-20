@@ -29,7 +29,7 @@ def load_inventory():
 def save_inventory(df):
     df.to_csv(INVENTORY_FILE, index=False)
 
-# Create or update column configuration
+# Column config: [{"name": "item", "type": "text"}, ...]
 def save_columns(columns):
     with open("columns.json", "w") as f:
         json.dump(columns, f)
@@ -38,16 +38,16 @@ def load_columns():
     if os.path.exists("columns.json"):
         with open("columns.json", "r") as f:
             return json.load(f)
-    return []  # return list of dicts: [{"name": "column_name", "type": "text"}]
+    return []
 
-    return response.choices[0].message.content
-# Login logic
+# --- SESSION INIT ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
 if "username" not in st.session_state:
     st.session_state.username = ""
 
+# --- LOGIN ---
 if not st.session_state.logged_in:
     st.title("Login")
     login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
@@ -76,9 +76,13 @@ if not st.session_state.logged_in:
                 users.loc[len(users)] = [new_username, new_password]
                 save_users(users)
                 st.success("Account created! Please log in.")
+
+# --- LOGGED IN VIEW ---
 else:
     st.sidebar.title("Navigation")
+    st.sidebar.markdown(f"👤 **Welcome, {st.session_state.username.title()}**")
     selection = st.sidebar.radio("Go to", ["View Inventory", "Add Item", "Ask the Agent", "Column Manager", "Change Password"])
+    
     if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
         st.session_state.username = ""
@@ -87,49 +91,56 @@ else:
     columns = load_columns()
     df = load_inventory()
 
-    columns = load_columns()
-    df = load_inventory()
+    # Ensure all configured columns are present in the DataFrame
+    for col in columns:
+        if col["name"] not in df.columns:
+            df[col["name"]] = ""
+            save_inventory(df)
 
+    # --- View Inventory ---
     if selection == "View Inventory":
         st.title("Inventory Viewer")
-        if df.empty or len(columns) == 0:
-            st.info("No columns to display.")
+        if len(columns) == 0:
+            st.info("No columns configured yet.")
         else:
-            st.dataframe(df)
+            if df.empty:
+                st.warning("Inventory is currently empty, but columns are defined.")
+                st.dataframe(pd.DataFrame(columns=[col["name"] for col in columns]))
+            else:
+                st.dataframe(df)
 
+    # --- Add Item ---
     elif selection == "Add Item":
-    st.title("Add Inventory Item")
-    if len(columns) == 0:
-        st.info("No columns to add.")
-    else:
-        with st.form("add_item_form"):
-            new_data = {}
-            for col in columns:
-                col_name = col["name"]
-                col_type = col["type"]
+        st.title("Add Inventory Item")
+        if len(columns) == 0:
+            st.info("No columns to add. Please add columns first.")
+        else:
+            with st.form("add_item_form"):
+                new_data = {}
+                for col in columns:
+                    col_name = col["name"]
+                    col_type = col["type"]
 
-                if col_type == "number":
-                    new_data[col_name] = st.number_input(f"{col_name.capitalize()}")
-                elif col_type == "date":
-                    new_data[col_name] = st.date_input(f"{col_name.capitalize()}").strftime("%Y-%m-%d")
-                else:
-                    new_data[col_name] = st.text_input(f"{col_name.capitalize()}")
+                    if col_type == "number":
+                        new_data[col_name] = st.number_input(f"{col_name.capitalize()}")
+                    elif col_type == "date":
+                        new_data[col_name] = st.date_input(f"{col_name.capitalize()}").strftime("%Y-%m-%d")
+                    else:
+                        new_data[col_name] = st.text_input(f"{col_name.capitalize()}")
 
-            submitted = st.form_submit_button("Add Item")
-            if submitted:
-                df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
-                save_inventory(df)
-                st.success("Item added successfully")
+                submitted = st.form_submit_button("Add Item")
+                if submitted:
+                    df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+                    save_inventory(df)
+                    st.success("Item added successfully")
 
-
+    # --- Ask the Agent ---
     elif selection == "Ask the Agent":
         st.title("Ask Inventory Agent")
-
         if df.empty:
             st.warning("Your inventory is currently empty. Add some items before asking questions.")
         else:
             query = st.text_input("Ask a question")
-
             if st.button("Submit") and query:
                 from litellm import completion
 
@@ -156,6 +167,7 @@ else:
                 except Exception as e:
                     st.error(f"Error from Groq AI: {e}")
 
+    # --- Change Password ---
     elif selection == "Change Password":
         st.title("Change Password")
         users = load_users()
@@ -173,23 +185,24 @@ else:
             else:
                 st.error("Incorrect current password")
 
+    # --- Column Manager ---
     elif selection == "Column Manager":
-    st.sidebar.title("Current Columns")
-    for col in columns:
-        st.sidebar.text(f"{col['name']} ({col['type']})")
+        st.sidebar.title("Current Columns")
+        for col in columns:
+            st.sidebar.text(f"{col['name']} ({col['type']})")
 
-    st.title("Manage Columns")
-    with st.form("column_form"):
-        new_col = st.text_input("New Column Name")
-        col_type = st.selectbox("Select Column Type", ["text", "number", "date"])
-        submitted = st.form_submit_button("Add Column")
-        if submitted and new_col:
-            if not any(c["name"] == new_col for c in columns):
-                columns.append({"name": new_col, "type": col_type})
-                save_columns(columns)
-                if new_col not in df.columns:
-                    df[new_col] = ""
-                    save_inventory(df)
-                st.success("Column added successfully")
-            else:
-                st.warning("Column already exists")
+        st.title("Manage Columns")
+        with st.form("column_form"):
+            new_col = st.text_input("New Column Name")
+            col_type = st.selectbox("Select Column Type", ["text", "number", "date"])
+            submitted = st.form_submit_button("Add Column")
+            if submitted and new_col:
+                if not any(c["name"].lower() == new_col.lower() for c in columns):
+                    columns.append({"name": new_col, "type": col_type})
+                    save_columns(columns)
+                    if new_col not in df.columns:
+                        df[new_col] = ""
+                        save_inventory(df)
+                    st.success("Column added successfully")
+                else:
+                    st.warning("Column already exists")
