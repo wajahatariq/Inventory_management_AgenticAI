@@ -127,11 +127,11 @@ if page == "Add Item":
 
 # ===== View Inventory Page =====
 elif page == "View Inventory":
-    st.header("📋 View & Manage Inventory")
+    st.header("View & Manage Inventory")
     st.markdown("### Inventory Items")
 
     csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download Inventory as CSV", data=csv, file_name='inventory.csv', mime='text/csv')
+    st.download_button("Download Inventory as CSV", data=csv, file_name='inventory.csv', mime='text/csv')
 
     headers = st.columns([2, 2, 1, 1, 1])
     headers[0].markdown(f"**{cols['item'].capitalize()}**")
@@ -200,17 +200,23 @@ Now answer the following user query clearly:
 elif page == "Settings":
     st.header("Customize Column Names")
     with st.form("column_config"):
-        item_col = st.text_input("Item Column Name", value=st.session_state.column_names["item"])
-        cat_col = st.text_input("Category Column Name", value=st.session_state.column_names["category"])
-        qty_col = st.text_input("Quantity Column Name", value=st.session_state.column_names["quantity"])
-        price_col = st.text_input("Price Column Name", value=st.session_state.column_names["price"])
-        save_col = st.form_submit_button("Save")
+        item_col = st.text_input("1st Column (Item)", value=st.session_state.column_names["item"])
+        cat_col = st.text_input("2nd Column (Category)", value=st.session_state.column_names["category"])
+        qty_col = st.text_input("3rd Column (Quantity)", value=st.session_state.column_names["quantity"])
+        price_col = st.text_input("4th Column (Price)", value=st.session_state.column_names["price"])
 
-        if save_col:
-            st.session_state.column_names = {
-                "item": item_col,
-                "category": cat_col,
-                "quantity": qty_col,
-                "price": price_col
-            }
-            st.success("Column names updated! Reload to apply.")
+        st.markdown("### 🗑️ Delete a Column")
+        col_to_delete = st.selectbox("Choose a column to delete (optional):", options=["None"] + list(st.session_state.column_names.values()))
+
+        st.markdown("### ➕ Add New Column")
+        new_col_name = st.text_input("Add New Column (e.g. 'supplier')")
+        add_col_btn = st.form_submit_button("Save")
+
+        if add_col_btn:
+            if col_to_delete and col_to_delete != "None":
+                st.session_state.column_names = {k: v for k, v in st.session_state.column_names.items() if v != col_to_delete}
+                st.success(f"Deleted column: {col_to_delete}")
+            if new_col_name:
+                key = new_col_name.lower().replace(" ", "_")
+                st.session_state.column_names[key] = new_col_name
+                st.success(f"Added new column: {new_col_name}")
