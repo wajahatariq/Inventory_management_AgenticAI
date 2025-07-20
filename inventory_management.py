@@ -1,169 +1,137 @@
 import streamlit as st
 import pandas as pd
 import os
-import uuid
-import json
-import hashlib
 
-# Constants
-DATA_FILE = "inventory.csv"
-USERS_FILE = "users.json"
-DEFAULT_COLUMNS = []
+# --- Utility Functions ---
+@st.cache_data
 
-# Utility Functions
-def load_users():
-    if os.path.exists(USERS_FILE):
-        with open(USERS_FILE, 'r') as f:
-            return json.load(f)
-    return {}
+def load_inventory():
+    if os.path.exists("inventory.csv"):
+        return pd.read_csv("inventory.csv")
+    return pd.DataFrame()
 
-def save_users(users):
-    with open(USERS_FILE, 'w') as f:
-        json.dump(users, f)
+def save_inventory(df):
+    df.to_csv("inventory.csv", index=False)
 
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+def load_columns():
+    if os.path.exists("columns.csv"):
+        return pd.read_csv("columns.csv")
+    return pd.DataFrame(columns=["column", "type"])
 
-def authenticate_user(username, password):
-    users = load_users()
-    return username in users and users[username] == hash_password(password)
+def save_columns(df):
+    df.to_csv("columns.csv", index=False)
 
-def create_user(username, password):
-    users = load_users()
-    if username not in users:
-        users[username] = hash_password(password)
-        save_users(users)
-        return True
+def login_user(username, password):
+    if os.path.exists("users.csv"):
+        users = pd.read_csv("users.csv")
+        user = users[(users["username"] == username) & (users["password"] == password)]
+        return not user.empty
     return False
 
-def load_data():
-    if os.path.exists(DATA_FILE):
-        return pd.read_csv(DATA_FILE)
-    else:
-        return pd.DataFrame()
+def create_user(username, password):
+    users = pd.read_csv("users.csv") if os.path.exists("users.csv") else pd.DataFrame(columns=["username", "password"])
+    if username in users['username'].values:
+        return False
+    new_user = pd.DataFrame([{"username": username, "password": password}])
+    users = pd.concat([users, new_user], ignore_index=True)
+    users.to_csv("users.csv", index=False)
+    return True
 
-def save_data(df):
-    df.to_csv(DATA_FILE, index=False)
+# --- Sidebar Login/Signup ---
+st.title("Inventory Manager")
 
-# App Config
-st.set_page_config(page_title="Inventory Manager", layout="wide")
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
-# Session State Initialization
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-if "username" not in st.session_state:
-    st.session_state.username = None
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+if not st.session_state.logged_in:
+    auth_mode = st.sidebar.radio("Login or Signup", ["Login", "Signup"])
+    username = st.sidebar.text_input("Username")
+    password = st.sidebar.text_input("Password", type="password")
 
-# Authentication Page
-def login_page():
-    st.title("🔐 Login")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    if st.button("Login"):
-        if authenticate_user(username, password):
-            st.session_state.authenticated = True
-            st.session_state.username = username
-            st.success("Login successful!")
-            st.rerun()
-        else:
-            st.error("Invalid credentials.")
-    st.markdown("---")
-    st.subheader("Create New Account")
-    new_username = st.text_input("New Username")
-    new_password = st.text_input("New Password", type="password")
-    if st.button("Create Account"):
-        if create_user(new_username, new_password):
-            st.success("Account created successfully!")
-        else:
-            st.error("Username already exists.")
-
-# Main Application
-if not st.session_state.authenticated:
-    login_page()
-else:
-    st.sidebar.title("📋 Inventory Manager")
-    if st.sidebar.button("Logout"):
-        st.session_state.authenticated = False
-        st.session_state.username = None
-        st.rerun()
-
-    df = load_data()
-
-    # Column Management
-    st.sidebar.subheader("🔧 Columns")
-    if df.empty:
-        columns = []
-    else:
-        columns = list(df.columns)
-
-    for col in columns:
-        st.sidebar.markdown(f"- {col}")
-
-    with st.expander("Add New Column"):
-        new_col_name = st.text_input("Column Name")
-        new_col_type = st.selectbox("Column Type", ["Text", "Number", "Date", "Dropdown"])
-        options = ""
-        if new_col_type == "Dropdown":
-            options = st.text_input("Options (comma separated)")
-        if st.button("Add Column"):
-            if new_col_name and new_col_name not in columns:
-                default_value = ""
-                if new_col_type == "Number":
-                    default_value = 0
-                elif new_col_type == "Date":
-                    default_value = "2025-01-01"
-                elif new_col_type == "Dropdown":
-                    default_value = options.split(",")[0].strip() if options else "Option1"
-                df[new_col_name] = default_value
-                save_data(df)
-                st.success(f"Added column '{new_col_name}'")
+    if auth_mode == "Login":
+        if st.sidebar.button("Login"):
+            if login_user(username, password):
+                st.session_state.logged_in = True
+                st.session_state.username = username
                 st.rerun()
-
-    st.title("🧾 Inventory Items")
-    st.subheader("Add New Item")
-
-    with st.form("add_item_form"):
-        item_data = {}
-        for col in df.columns:
-            if df[col].dtype == 'int64' or df[col].dtype == 'float64':
-                item_data[col] = st.number_input(f"{col}", step=1, key=f"input_{col}")
-            elif 'date' in col.lower():
-                item_data[col] = st.date_input(f"{col}", key=f"input_{col}").strftime("%Y-%m-%d")
-            elif isinstance(df[col][0], str) and "," in df[col][0]:
-                options = [opt.strip() for opt in df[col][0].split(",")]
-                item_data[col] = st.selectbox(f"{col}", options, key=f"input_{col}")
             else:
-                item_data[col] = st.text_input(f"{col}", key=f"input_{col}")
-        submitted = st.form_submit_button("Add Item")
+                st.sidebar.error("Invalid credentials.")
+    else:
+        if st.sidebar.button("Signup"):
+            if create_user(username, password):
+                st.sidebar.success("User created. Please login.")
+            else:
+                st.sidebar.error("Username already exists.")
+    st.stop()
 
-    if submitted:
-        item_data["id"] = str(uuid.uuid4())
-        df = pd.concat([df, pd.DataFrame([item_data])], ignore_index=True)
-        save_data(df)
-        st.success("Item added successfully!")
-        st.rerun()
+# --- Logout Option ---
+if st.sidebar.button("Logout"):
+    st.session_state.logged_in = False
+    st.rerun()
 
-    st.subheader("📦 Current Inventory")
+# --- Load Columns ---
+columns_df = load_columns()
+inventory_df = load_inventory()
 
-    # Inventory Table with Delete Option
-    for i, row in df.iterrows():
-        cols = st.columns([1 for _ in df.columns] + [1])
-        for j, col in enumerate(df.columns):
-            cols[j].markdown(f"**{col}**: {row[col]}")
-        delete_button = cols[-1].button("❌", key=f"del_{row['id']}")
-        if delete_button:
-            df = df[df['id'] != row['id']]
-            save_data(df)
-            st.success(f"Deleted item {row.get('item', 'Unnamed')}")
+# --- Sidebar Column Manager ---
+st.sidebar.subheader("Manage Columns")
+
+for i, row in columns_df.iterrows():
+    col_name = row['column']
+    st.sidebar.text(col_name)
+
+with st.sidebar.expander("Add New Column"):
+    new_col = st.text_input("Column Name")
+    new_type = st.selectbox("Column Type", ["text", "number", "date", "dropdown"])
+    if st.button("Add Column"):
+        if new_col and new_col not in columns_df['column'].values:
+            columns_df = pd.concat([columns_df, pd.DataFrame([[new_col, new_type]], columns=["column", "type"])]).reset_index(drop=True)
+            save_columns(columns_df)
+            if new_col not in inventory_df.columns:
+                inventory_df[new_col] = ""
+                save_inventory(inventory_df)
             st.rerun()
 
-    # Download CSV
-    csv_data = df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Download Inventory as CSV",
-        data=csv_data,
-        file_name='inventory.csv',
-        mime='text/csv'
-    )
+# --- Main Window ---
+st.header("Inventory")
+
+if columns_df.empty:
+    st.warning("No columns to add.")
+    st.stop()
+
+# --- Add Item Form ---
+with st.form("add_item_form"):
+    st.subheader("Add Item")
+    new_item = {}
+    for _, row in columns_df.iterrows():
+        col, col_type = row['column'], row['type']
+        if col_type == "number":
+            new_item[col] = st.number_input(col, step=1)
+        elif col_type == "date":
+            new_item[col] = st.date_input(col)
+        elif col_type == "dropdown":
+            options = st.text_input(f"Options for {col} (comma separated)")
+            if options:
+                new_item[col] = st.selectbox(col, options.split(","))
+            else:
+                new_item[col] = ""
+        else:
+            new_item[col] = st.text_input(col)
+    submitted = st.form_submit_button("Add Item")
+    if submitted:
+        inventory_df = pd.concat([inventory_df, pd.DataFrame([new_item])], ignore_index=True)
+        save_inventory(inventory_df)
+        st.success("Item added.")
+
+# --- View Inventory ---
+st.subheader("Current Inventory")
+
+if inventory_df.empty:
+    st.info("No inventory data.")
+else:
+    st.dataframe(inventory_df)
+    for i in range(len(inventory_df)):
+        if st.button(f"Delete Row {i+1}", key=f"delete_{i}"):
+            inventory_df = inventory_df.drop(index=i).reset_index(drop=True)
+            save_inventory(inventory_df)
+            st.rerun()
