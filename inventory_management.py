@@ -89,14 +89,19 @@ else:
         st.rerun()
 
     columns = load_columns()
-    df = load_inventory()
 
-    # Ensure all configured columns are present in the DataFrame
-    for col in columns:
-        if col["name"] not in df.columns:
-            df[col["name"]] = ""
-            save_inventory(df)
+# One-time fix: migrate old string-based format to dict format
+if columns and isinstance(columns[0], str):
+    columns = [{"name": col, "type": "text"} for col in columns]
+    save_columns(columns)
 
+df = load_inventory()
+
+# Ensure all configured columns exist in DataFrame
+for col in columns:
+    if col["name"] not in df.columns:
+        df[col["name"]] = ""
+        save_inventory(df)
     # --- View Inventory ---
     if selection == "View Inventory":
         st.title("Inventory Viewer")
