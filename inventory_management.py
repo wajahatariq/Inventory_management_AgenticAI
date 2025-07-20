@@ -104,24 +104,22 @@ cols = st.session_state.column_names  # shorthand
 if page == "Add Item":
     st.header("Add New Inventory Item")
     with st.form("add_form"):
-        item = st.text_input("Item Name")
-        category = st.text_input("Category")
-        quantity = st.number_input("Quantity", min_value=0, step=1)
-        price = st.number_input("Price ($)", min_value=0.0, step=0.01)
+        new_data = {}
+        for key, col_name in st.session_state.column_names.items():
+            if "quantity" in key:
+                new_data[col_name] = st.number_input(col_name.capitalize(), min_value=0, step=1)
+            elif "price" in key:
+                new_data[col_name] = st.number_input(col_name.capitalize(), min_value=0.0, step=0.01)
+            else:
+                new_data[col_name] = st.text_input(col_name.capitalize())
         submitted = st.form_submit_button("Add Item")
 
     if submitted:
-        if item and category:
-            new_item = {
-                "id": str(uuid.uuid4()),
-                cols["item"]: item,
-                cols["category"]: category,
-                cols["quantity"]: quantity,
-                cols["price"]: price
-            }
+        if all(v != '' for v in new_data.values()):
+            new_item = {"id": str(uuid.uuid4()), **new_data}
             df = pd.concat([df, pd.DataFrame([new_item])], ignore_index=True)
             save_data(df)
-            st.success(f"Added {item} to inventory.")
+            st.success(f"Added {new_data.get(cols['item'], 'Item')} to inventory.")
         else:
             st.error("Please fill all the fields.")
 
@@ -133,24 +131,20 @@ elif page == "View Inventory":
     csv = df.to_csv(index=False).encode('utf-8')
     st.download_button("Download Inventory as CSV", data=csv, file_name='inventory.csv', mime='text/csv')
 
-    headers = st.columns([2, 2, 1, 1, 1])
-    headers[0].markdown(f"**{cols['item'].capitalize()}**")
-    headers[1].markdown(f"**{cols['category'].capitalize()}**")
-    headers[2].markdown(f"**{cols['quantity'].capitalize()}**")
-    headers[3].markdown(f"**{cols['price'].capitalize()}**")
-    headers[4].markdown("**Action**")
+    widths = [2] * len(cols) + [1]
+    headers = st.columns(widths)
+    for i, (key, name) in enumerate(cols.items()):
+        headers[i].markdown(f"**{name.capitalize()}**")
+    headers[-1].markdown("**Action**")
 
     for idx, row in df.iterrows():
-        cols_ui = st.columns([2, 2, 1, 1, 1])
-        cols_ui[0].markdown(row[cols['item']])
-        cols_ui[1].markdown(row[cols['category']])
-        cols_ui[2].markdown(str(row[cols['quantity']]))
-        cols_ui[3].markdown(f"${row[cols['price']]:.2f}")
-        delete_button = cols_ui[4].button("Delete", key=row['id'])
-        if delete_button:
+        row_cols = st.columns(widths)
+        for i, name in enumerate(cols.values()):
+            row_cols[i].markdown(str(row[name]))
+        if row_cols[-1].button("Delete", key=row['id']):
             df = df[df['id'] != row['id']]
             save_data(df)
-            st.success(f"Deleted {row[cols['item']]} from inventory.")
+            st.success("Item deleted.")
             st.rerun()
 
 # ===== Ask the Agent Page =====
@@ -169,7 +163,8 @@ elif page == "Ask the Agent":
             inventory_summary = "The inventory is currently empty."
         else:
             for _, row in df.iterrows():
-                inventory_summary += f"- {row[cols['item']]} ({row[cols['category']]}): {row[cols['quantity']]} units at ${row[cols['price']]:.2f}\n"
+                summary = " - ".join([f"{row[name]}" for name in cols.values()])
+                inventory_summary += f"- {summary}\n"
 
         prompt = f"""
 You are an expert inventory assistant.
@@ -199,24 +194,34 @@ Now answer the following user query clearly:
 # ===== Settings Page =====
 elif page == "Settings":
     st.header("Customize Column Names")
+    updated = False
+
+    col_keys = list(st.session_state.column_names.keys())
     with st.form("column_config"):
-        item_col = st.text_input("1st Column", value=st.session_state.column_names["item"])
-        cat_col = st.text_input("2nd Column", value=st.session_state.column_names["category"])
-        qty_col = st.text_input("3rd Column", value=st.session_state.column_names["quantity"])
-        price_col = st.text_input("4th Column", value=st.session_state.column_names["price"])
+        new_column_names = {}
+        remove_keys = []
+        for i, (key, name) in enumerate(st.session_state.column_names.items()):
+            col1, col2 = st.columns([4, 1])
+            new_name = col1.text_input(f"{i+1} Column", value=name, key=f"col_{key}")
+            if col2.button("❌", key=f"del_{key}") and i >= 3:
+                remove_keys.append(key)
+            else:
+                new_column_names[key] = new_name
 
-        st.markdown("### Delete a Column")
-        col_to_delete = st.selectbox("Choose a column to delete (optional):", options=["None"] + list(st.session_state.column_names.values()))
+        if st.form_submit_button("Add New Column"):
+            new_key = f"custom_{uuid.uuid4().hex[:4]}"
+            new_column_names[new_key] = f"Column {len(new_column_names)+1}"
+            updated = True
 
-        st.markdown("### Add New Column")
-        new_col_name = st.text_input("Add New Column")
-        add_col_btn = st.form_submit_button("Save")
-
-        if add_col_btn:
-            if col_to_delete and col_to_delete != "None":
-                st.session_state.column_names = {k: v for k, v in st.session_state.column_names.items() if v != col_to_delete}
-                st.success(f"Deleted column: {col_to_delete}")
-            if new_col_name:
-                key = new_col_name.lower().replace(" ", "_")
-                st.session_state.column_names[key] = new_col_name
-                st.success(f"Added new column: {new_col_name}")
+        if st.form_submit_button("Save") or updated:
+            for k in remove_keys:
+                new_column_names.pop(k, None)
+            fixed_keys = ["item", "category", "quantity", "price"]
+            fixed_ordered = {k: new_column_names.pop(k) for k in fixed_keys if k in new_column_names}
+            st.session_state.column_names = {**fixed_ordered, **new_column_names}
+            if not df.empty:
+                for new_col in st.session_state.column_names.values():
+                    if new_col not in df.columns:
+                        df[new_col] = ""
+                save_data(df)
+            st.success("Column names updated and inventory structure synced!")
