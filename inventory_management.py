@@ -200,16 +200,16 @@ Now answer the following user query clearly:
 elif page == "Settings":
     st.header("Customize Column Names")
     with st.form("column_config"):
-        item_col = st.text_input("1st Column (Item)", value=st.session_state.column_names["item"])
-        cat_col = st.text_input("2nd Column (Category)", value=st.session_state.column_names["category"])
-        qty_col = st.text_input("3rd Column (Quantity)", value=st.session_state.column_names["quantity"])
-        price_col = st.text_input("4th Column (Price)", value=st.session_state.column_names["price"])
+        item_col = st.text_input("1st Column", value=st.session_state.column_names["item"])
+        cat_col = st.text_input("2nd Column", value=st.session_state.column_names["category"])
+        qty_col = st.text_input("3rd Column", value=st.session_state.column_names["quantity"])
+        price_col = st.text_input("4th Column", value=st.session_state.column_names["price"])
 
-        st.markdown("### 🗑️ Delete a Column")
+        st.markdown("###Delete a Column")
         col_to_delete = st.selectbox("Choose a column to delete (optional):", options=["None"] + list(st.session_state.column_names.values()))
 
-        st.markdown("### ➕ Add New Column")
-        new_col_name = st.text_input("Add New Column (e.g. 'supplier')")
+        st.markdown("###Add New Column")
+        new_col_name = st.text_input("Add New Column")
         add_col_btn = st.form_submit_button("Save")
 
         if add_col_btn:
