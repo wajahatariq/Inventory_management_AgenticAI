@@ -5,7 +5,7 @@ import uuid
 import litellm
 
 # Use Streamlit secrets for Gemini key
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
 st.set_page_config(page_title="Inventory Manager", layout="wide")
 
@@ -124,11 +124,11 @@ Now answer the following user query clearly:
 "{user_input}"
         """
 
-        # 🧠 Call Gemini
+        # 🧠 Call Groq
         try:
-            litellm.api_key = GEMINI_API_KEY
+            litellm.api_key = GROQ_API_KEY
             response = litellm.completion(
-                model="gemini/gemini-1.5-flash",
+                model="groq/llama3-8b-8192",  # or other Groq model
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that analyzes inventory data."},
                     {"role": "user", "content": prompt}
