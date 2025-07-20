@@ -87,7 +87,7 @@ else:
     columns = load_columns()
     df = load_inventory()
 
-        columns = load_columns()
+    columns = load_columns()
     df = load_inventory()
 
     if selection == "View Inventory":
