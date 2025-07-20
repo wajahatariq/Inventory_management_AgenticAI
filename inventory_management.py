@@ -38,7 +38,7 @@ def load_columns():
     if os.path.exists("columns.json"):
         with open("columns.json", "r") as f:
             return json.load(f)
-    return []
+    return []  # return list of dicts: [{"name": "column_name", "type": "text"}]
 
     return response.choices[0].message.content
 # Login logic
@@ -98,19 +98,29 @@ else:
             st.dataframe(df)
 
     elif selection == "Add Item":
-        st.title("Add Inventory Item")
-        if len(columns) == 0:
-            st.info("No columns to add.")
-        else:
-            with st.form("add_item_form"):
-                new_data = {}
-                for col in columns:
-                    new_data[col] = st.text_input(f"{col.capitalize()}")
-                submitted = st.form_submit_button("Add Item")
-                if submitted:
-                    df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
-                    save_inventory(df)
-                    st.success("Item added successfully")
+    st.title("Add Inventory Item")
+    if len(columns) == 0:
+        st.info("No columns to add.")
+    else:
+        with st.form("add_item_form"):
+            new_data = {}
+            for col in columns:
+                col_name = col["name"]
+                col_type = col["type"]
+
+                if col_type == "number":
+                    new_data[col_name] = st.number_input(f"{col_name.capitalize()}")
+                elif col_type == "date":
+                    new_data[col_name] = st.date_input(f"{col_name.capitalize()}").strftime("%Y-%m-%d")
+                else:
+                    new_data[col_name] = st.text_input(f"{col_name.capitalize()}")
+
+            submitted = st.form_submit_button("Add Item")
+            if submitted:
+                df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+                save_inventory(df)
+                st.success("Item added successfully")
+
 
     elif selection == "Ask the Agent":
         st.title("Ask Inventory Agent")
@@ -164,21 +174,22 @@ else:
                 st.error("Incorrect current password")
 
     elif selection == "Column Manager":
-        st.sidebar.title("Current Columns")
-        for col in columns:
-            st.sidebar.text(col)
+    st.sidebar.title("Current Columns")
+    for col in columns:
+        st.sidebar.text(f"{col['name']} ({col['type']})")
 
-        st.title("Manage Columns")
-        with st.form("column_form"):
-            new_col = st.text_input("New Column Name")
-            submitted = st.form_submit_button("Add Column")
-            if submitted and new_col:
-                if new_col not in columns:
-                    columns.append(new_col)
-                    save_columns(columns)
-                    if new_col not in df.columns:
-                        df[new_col] = ""
-                        save_inventory(df)
-                    st.success("Column added successfully")
-                else:
-                    st.warning("Column already exists")
+    st.title("Manage Columns")
+    with st.form("column_form"):
+        new_col = st.text_input("New Column Name")
+        col_type = st.selectbox("Select Column Type", ["text", "number", "date"])
+        submitted = st.form_submit_button("Add Column")
+        if submitted and new_col:
+            if not any(c["name"] == new_col for c in columns):
+                columns.append({"name": new_col, "type": col_type})
+                save_columns(columns)
+                if new_col not in df.columns:
+                    df[new_col] = ""
+                    save_inventory(df)
+                st.success("Column added successfully")
+            else:
+                st.warning("Column already exists")
