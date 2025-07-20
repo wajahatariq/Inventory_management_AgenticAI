@@ -36,7 +36,8 @@ def create_user(username, password):
     users = load_users()
     if username in users['username'].values:
         return False
-    users = users.append({"username": username, "password": password}, ignore_index=True)
+    new_user = pd.DataFrame([{"username": username, "password": password}])
+    users = pd.concat([users, new_user], ignore_index=True)
     save_users(users)
     return True
 
