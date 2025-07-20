@@ -109,7 +109,7 @@ for col in columns:
             st.info("No columns configured yet.")
         else:
             if df.empty:
-                st.warning("Inventory is currently empty, but columns are defined.")
+                st.warning("Inventory is currently empty")
                 st.dataframe(pd.DataFrame(columns=[col["name"] for col in columns]))
             else:
                 st.dataframe(df)
