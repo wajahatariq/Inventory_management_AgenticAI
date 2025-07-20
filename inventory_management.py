@@ -66,7 +66,7 @@ def login_page():
             st.session_state.authenticated = True
             st.session_state.username = username
             st.success("Login successful!")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Invalid credentials.")
     st.markdown("---")
@@ -87,7 +87,7 @@ else:
     if st.sidebar.button("Logout"):
         st.session_state.authenticated = False
         st.session_state.username = None
-        st.experimental_rerun()
+        st.rerun()
 
     df = load_data()
 
@@ -119,7 +119,7 @@ else:
                 df[new_col_name] = default_value
                 save_data(df)
                 st.success(f"Added column '{new_col_name}'")
-                st.experimental_rerun()
+                st.rerun()
 
     st.title("🧾 Inventory Items")
     st.subheader("Add New Item")
@@ -143,7 +143,7 @@ else:
         df = pd.concat([df, pd.DataFrame([item_data])], ignore_index=True)
         save_data(df)
         st.success("Item added successfully!")
-        st.experimental_rerun()
+        st.rerun()
 
     st.subheader("📦 Current Inventory")
 
@@ -157,7 +157,7 @@ else:
             df = df[df['id'] != row['id']]
             save_data(df)
             st.success(f"Deleted item {row.get('item', 'Unnamed')}")
-            st.experimental_rerun()
+            st.rerun()
 
     # Download CSV
     csv_data = df.to_csv(index=False).encode('utf-8')
