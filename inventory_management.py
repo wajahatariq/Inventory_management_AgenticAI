@@ -88,7 +88,7 @@ else:
         st.session_state.username = ""
         st.rerun()
 
-    columns = load_columns()
+columns = load_columns()
 
 # One-time fix: migrate old string-based format to dict format
 if columns and isinstance(columns[0], str):
