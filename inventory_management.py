@@ -1,40 +1,105 @@
+# inventory_manager.py
 import streamlit as st
 import pandas as pd
 import os
 import uuid
 import litellm
 
-# Use Streamlit secrets for Gemini key
-GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+# ===== Configuration =====
+DATA_FILE = "inventory.csv"
+USER_DB = "users.csv"
 
+# ===== Streamlit Setup =====
 st.set_page_config(page_title="Inventory Manager", layout="wide")
 
-DATA_FILE = "inventory.csv"
-
+# ===== Load/Save Inventory =====
 def load_data():
     if os.path.exists(DATA_FILE):
         return pd.read_csv(DATA_FILE)
     else:
-        return pd.DataFrame(columns=["id", "item", "category", "quantity", "price"])
+        return pd.DataFrame(columns=["id", *st.session_state.column_names.values()])
 
 def save_data(df):
     df.to_csv(DATA_FILE, index=False)
 
+# ===== Load/Save Users =====
+def load_users():
+    if os.path.exists(USER_DB):
+        return pd.read_csv(USER_DB)
+    else:
+        return pd.DataFrame(columns=["username", "password"])
+
+def save_users(df):
+    df.to_csv(USER_DB, index=False)
+
+def create_user(username, password):
+    users = load_users()
+    if username in users['username'].values:
+        return False
+    users = users.append({"username": username, "password": password}, ignore_index=True)
+    save_users(users)
+    return True
+
+def authenticate(username, password):
+    users = load_users()
+    return any((users["username"] == username) & (users["password"] == password))
+
+# ===== Login/Signup Logic =====
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if "column_names" not in st.session_state:
+    st.session_state.column_names = {
+        "item": "item",
+        "category": "category",
+        "quantity": "quantity",
+        "price": "price"
+    }
+
+if not st.session_state.logged_in:
+    st.title("Admin Login")
+
+    login_tab, signup_tab = st.tabs(["Login", "Signup"])
+
+    with login_tab:
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            if authenticate(username, password):
+                st.session_state.logged_in = True
+                st.success("Logged in successfully")
+                st.experimental_rerun()
+            else:
+                st.error("Invalid credentials")
+
+    with signup_tab:
+        new_username = st.text_input("New Username")
+        new_password = st.text_input("New Password", type="password")
+        if st.button("Sign Up"):
+            if create_user(new_username, new_password):
+                st.success("User created. Please login.")
+            else:
+                st.error("Username already exists.")
+    st.stop()
+
+# ===== Load Inventory After Login =====
 df = load_data()
 
-# Sidebar Navigation
+# ===== Sidebar Navigation =====
 st.sidebar.title("Inventory Management")
-pages = ["Add Item", "View Inventory", "Ask the Agent"]
+pages = ["Add Item", "View Inventory", "Ask the Agent", "Settings"]
 
-# Clear chat history when switching pages
 if "last_page" not in st.session_state:
     st.session_state.last_page = pages[0]
+
 page = st.sidebar.radio("Go to", pages)
 if page != st.session_state.last_page:
     st.session_state.chat_history = []
     st.session_state.last_page = page
 
-# Add Item Page
+cols = st.session_state.column_names  # shorthand
+
+# ===== Add Item Page =====
 if page == "Add Item":
     st.header("Add New Inventory Item")
     with st.form("add_form"):
@@ -48,10 +113,10 @@ if page == "Add Item":
         if item and category:
             new_item = {
                 "id": str(uuid.uuid4()),
-                "item": item,
-                "category": category,
-                "quantity": quantity,
-                "price": price
+                cols["item"]: item,
+                cols["category"]: category,
+                cols["quantity"]: quantity,
+                cols["price"]: price
             }
             df = pd.concat([df, pd.DataFrame([new_item])], ignore_index=True)
             save_data(df)
@@ -59,42 +124,35 @@ if page == "Add Item":
         else:
             st.error("Please fill all the fields.")
 
-# View Inventory Page
+# ===== View Inventory Page =====
 elif page == "View Inventory":
     st.header("📋 View & Manage Inventory")
     st.markdown("### Inventory Items")
 
-    # 📥 Download Button
     csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Download Inventory as CSV",
-        data=csv,
-        file_name='inventory.csv',
-        mime='text/csv',
-    )
+    st.download_button("📥 Download Inventory as CSV", data=csv, file_name='inventory.csv', mime='text/csv')
 
-    # Table Headers
-    header_cols = st.columns([2, 2, 1, 1, 1])
-    header_cols[0].markdown("**Item**")
-    header_cols[1].markdown("**Category**")
-    header_cols[2].markdown("**Quantity**")
-    header_cols[3].markdown("**Price**")
-    header_cols[4].markdown("**Action**")
+    headers = st.columns([2, 2, 1, 1, 1])
+    headers[0].markdown(f"**{cols['item'].capitalize()}**")
+    headers[1].markdown(f"**{cols['category'].capitalize()}**")
+    headers[2].markdown(f"**{cols['quantity'].capitalize()}**")
+    headers[3].markdown(f"**{cols['price'].capitalize()}**")
+    headers[4].markdown("**Action**")
 
-    # Display Inventory Items
     for idx, row in df.iterrows():
-        cols = st.columns([2, 2, 1, 1, 1])
-        cols[0].markdown(row['item'])
-        cols[1].markdown(row['category'])
-        cols[2].markdown(str(row['quantity']))
-        cols[3].markdown(f"${row['price']:.2f}")
-        delete_button = cols[4].button("Delete", key=row['id'])
+        cols_ui = st.columns([2, 2, 1, 1, 1])
+        cols_ui[0].markdown(row[cols['item']])
+        cols_ui[1].markdown(row[cols['category']])
+        cols_ui[2].markdown(str(row[cols['quantity']]))
+        cols_ui[3].markdown(f"${row[cols['price']]:.2f}")
+        delete_button = cols_ui[4].button("Delete", key=row['id'])
         if delete_button:
             df = df[df['id'] != row['id']]
             save_data(df)
-            st.success(f"Deleted {row['item']} from inventory.")
+            st.success(f"Deleted {row[cols['item']]} from inventory.")
             st.rerun()
-# Ask the Agent Page
+
+# ===== Ask the Agent Page =====
 elif page == "Ask the Agent":
     st.header("Ask the Inventory Agent")
     user_input = st.text_input("Ask anything about the inventory...")
@@ -105,15 +163,13 @@ elif page == "Ask the Agent":
     if user_input:
         st.session_state.chat_history.append({"role": "user", "content": user_input})
 
-        # 🔍 Check if inventory is empty
+        inventory_summary = ""
         if df.empty:
             inventory_summary = "The inventory is currently empty."
         else:
-            inventory_summary = ""
             for _, row in df.iterrows():
-                inventory_summary += f"- {row['item']} ({row['category']}): {row['quantity']} units at ${row['price']:.2f}\n"
+                inventory_summary += f"- {row[cols['item']]} ({row[cols['category']]}): {row[cols['quantity']]} units at ${row[cols['price']]:.2f}\n"
 
-        # 🧠 Construct the prompt
         prompt = f"""
 You are an expert inventory assistant.
 
@@ -121,14 +177,13 @@ Here is the current inventory:
 {inventory_summary}
 
 Now answer the following user query clearly:
-"{user_input}"
+\"{user_input}\"
         """
 
-        # 🧠 Call Groq
         try:
-            litellm.api_key = GROQ_API_KEY
+            litellm.api_key = st.secrets["GROQ_API_KEY"]
             response = litellm.completion(
-                model="groq/llama3-8b-8192",  # or other Groq model
+                model="groq/llama3-8b-8192",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that analyzes inventory data."},
                     {"role": "user", "content": prompt}
@@ -139,3 +194,22 @@ Now answer the following user query clearly:
             reply = f"Error: {str(e)}"
 
         st.markdown(reply)
+
+# ===== Settings Page =====
+elif page == "Settings":
+    st.header("Customize Column Names")
+    with st.form("column_config"):
+        item_col = st.text_input("Item Column Name", value=st.session_state.column_names["item"])
+        cat_col = st.text_input("Category Column Name", value=st.session_state.column_names["category"])
+        qty_col = st.text_input("Quantity Column Name", value=st.session_state.column_names["quantity"])
+        price_col = st.text_input("Price Column Name", value=st.session_state.column_names["price"])
+        save_col = st.form_submit_button("Save")
+
+        if save_col:
+            st.session_state.column_names = {
+                "item": item_col,
+                "category": cat_col,
+                "quantity": qty_col,
+                "price": price_col
+            }
+            st.success("Column names updated! Reload to apply.")
