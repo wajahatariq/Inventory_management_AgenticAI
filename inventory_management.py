@@ -205,10 +205,10 @@ elif page == "Settings":
         qty_col = st.text_input("3rd Column", value=st.session_state.column_names["quantity"])
         price_col = st.text_input("4th Column", value=st.session_state.column_names["price"])
 
-        st.markdown("###Delete a Column")
+        st.markdown("### Delete a Column")
         col_to_delete = st.selectbox("Choose a column to delete (optional):", options=["None"] + list(st.session_state.column_names.values()))
 
-        st.markdown("###Add New Column")
+        st.markdown("### Add New Column")
         new_col_name = st.text_input("Add New Column")
         add_col_btn = st.form_submit_button("Save")
 
