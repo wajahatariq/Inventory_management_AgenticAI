@@ -87,6 +87,9 @@ else:
     columns = load_columns()
     df = load_inventory()
 
+        columns = load_columns()
+    df = load_inventory()
+
     if selection == "View Inventory":
         st.title("Inventory Viewer")
         if df.empty or len(columns) == 0:
@@ -109,41 +112,40 @@ else:
                     save_inventory(df)
                     st.success("Item added successfully")
 
-elif selection == "Ask the Agent":
-    st.title("Ask Inventory Agent")
+    elif selection == "Ask the Agent":
+        st.title("Ask Inventory Agent")
 
-    if inventory_df.empty:
-        st.warning("Your inventory is currently empty. Add some items before asking questions.")
-    else:
-        query = st.text_input("Ask a question")
+        if df.empty:
+            st.warning("Your inventory is currently empty. Add some items before asking questions.")
+        else:
+            query = st.text_input("Ask a question")
 
-        if st.button("Submit") and query:
-            import json
-            from litellm import completion
+            if st.button("Submit") and query:
+                from litellm import completion
 
-            # Format inventory for LLM
-            inventory_data = inventory_df.fillna("").to_dict(orient="records")
+                inventory_data = df.fillna("").to_dict(orient="records")
 
-            messages = [
-                {
-                    "role": "system",
-                    "content": "You are an intelligent inventory assistant. Use the data below to answer user questions. Be precise and concise. If something is not in the inventory, say so.",
-                },
-                {"role": "user", "content": f"Inventory:\n{json.dumps(inventory_data, indent=2)}"},
-                {"role": "user", "content": f"Question: {query}"},
-            ]
+                messages = [
+                    {
+                        "role": "system",
+                        "content": "You are an intelligent inventory assistant. Use the data below to answer user questions. Be precise and concise. If something is not in the inventory, say so.",
+                    },
+                    {"role": "user", "content": f"Inventory:\n{json.dumps(inventory_data, indent=2)}"},
+                    {"role": "user", "content": f"Question: {query}"},
+                ]
 
-            try:
-                response = completion(
-                    model="groq/llama3-8b-8192",
-                    messages=messages,
-                    api_key=st.secrets["GROQ_API_KEY"],  # Make sure this is set in .streamlit/secrets.toml
-                )
-                answer = response.choices[0].message.content
-                st.success("Agent Response:")
-                st.write(answer)
-            except Exception as e:
-                st.error(f"Error from Groq AI: {e}")
+                try:
+                    response = completion(
+                        model="groq/llama3-8b-8192",
+                        messages=messages,
+                        api_key=st.secrets["GROQ_API_KEY"],
+                    )
+                    answer = response.choices[0].message.content
+                    st.success("Agent Response:")
+                    st.write(answer)
+                except Exception as e:
+                    st.error(f"Error from Groq AI: {e}")
+
     elif selection == "Change Password":
         st.title("Change Password")
         users = load_users()
