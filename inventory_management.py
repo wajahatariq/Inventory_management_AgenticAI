@@ -98,10 +98,42 @@ if columns and isinstance(columns[0], str):
 df = load_inventory()
 
 # Ensure all configured columns exist in DataFrame
+# Ensure all configured columns exist in DataFrame
 for col in columns:
     if col["name"] not in df.columns:
         df[col["name"]] = ""
         save_inventory(df)
+
+# --- Now start Streamlit logic ---
+if selection == "View Inventory":
+    ...
+elif selection == "Add Item":
+    ...
+elif selection == "Ask the Agent":
+    ...
+elif selection == "Change Password":
+    ...
+elif selection == "Column Manager":
+    st.sidebar.title("Current Columns")
+    for col in columns:
+        st.sidebar.text(f"{col['name']} ({col['type']})")
+
+    st.title("Manage Columns")
+    with st.form("column_form"):
+        new_col = st.text_input("New Column Name")
+        col_type = st.selectbox("Select Column Type", ["text", "number", "date"])
+        submitted = st.form_submit_button("Add Column")
+        if submitted and new_col:
+            if not any(c["name"].lower() == new_col.lower() for c in columns):
+                columns.append({"name": new_col, "type": col_type})
+                save_columns(columns)
+                if new_col not in df.columns:
+                    df[new_col] = ""
+                    save_inventory(df)
+                st.success("Column added successfully")
+            else:
+                st.warning("Column already exists")
+
     # --- View Inventory ---
     if selection == "View Inventory":
         st.title("Inventory Viewer")
