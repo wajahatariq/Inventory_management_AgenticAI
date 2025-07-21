@@ -115,38 +115,38 @@ else:
     if selection == "View Inventory":
         st.title("Inventory Viewer")
 
-if len(columns) == 0:
-    st.info("No columns configured yet.")
-else:
-    if df.empty:
-        st.warning("Inventory is currently empty")
-    else:
-        user_columns = [col["name"] for col in columns]
-        display_columns = ["ID#"] + user_columns + ["Action"]
-
-        # --- Table Header ---
-        header_cols = st.columns(len(display_columns))
-        for idx, col_name in enumerate(display_columns):
-            header_cols[idx].markdown(f"**{col_name}**")
-
-        # --- Table Rows ---
-        for i, row in df.iterrows():
-            row_cols = st.columns(len(display_columns))
-
-            # ID# column
-            row_cols[0].write(row.get("ID#", f"ID{i+1:04d}"))
-
-            # Dynamic user-defined columns
-            for j, col_name in enumerate(user_columns, start=1):
-                row_cols[j].write(str(row.get(col_name, "")))
-
-            # Action column
-            if row_cols[-1].button("Delete", key=f"delete_{i}"):
-                df.drop(index=i, inplace=True)
-                df.reset_index(drop=True, inplace=True)
-                save_inventory(df)
-                st.success("Item deleted successfully.")
-                st.rerun()
+        if len(columns) == 0:
+            st.info("No columns configured yet.")
+        else:
+            if df.empty:
+                st.warning("Inventory is currently empty")
+            else:
+                user_columns = [col["name"] for col in columns]
+                display_columns = ["ID#"] + user_columns + ["Action"]
+        
+                # --- Table Header ---
+                header_cols = st.columns(len(display_columns))
+                for idx, col_name in enumerate(display_columns):
+                    header_cols[idx].markdown(f"**{col_name}**")
+        
+                # --- Table Rows ---
+                for i, row in df.iterrows():
+                    row_cols = st.columns(len(display_columns))
+        
+                    # ID# column
+                    row_cols[0].write(row.get("ID#", f"ID{i+1:04d}"))
+        
+                    # Dynamic user-defined columns
+                    for j, col_name in enumerate(user_columns, start=1):
+                        row_cols[j].write(str(row.get(col_name, "")))
+        
+                    # Action column
+                    if row_cols[-1].button("Delete", key=f"delete_{i}"):
+                        df.drop(index=i, inplace=True)
+                        df.reset_index(drop=True, inplace=True)
+                        save_inventory(df)
+                        st.success("Item deleted successfully.")
+                        st.rerun()
 
 
             else:
