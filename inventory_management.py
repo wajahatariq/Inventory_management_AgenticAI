@@ -138,7 +138,7 @@ else:
                         st.rerun()
             else:
                 st.warning("Inventory is currently empty")
-            st.dataframe(visible_df)
+            st.dataframe(display_df)
 
     # --- Add Item ---
     elif selection == "Add Item":
