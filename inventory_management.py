@@ -5,7 +5,7 @@ import json
 import hashlib
 from datetime import datetime
 
-USER_FILE = "users.csv"
+USER_FILE = "user.csv"
 INVENTORY_FILE = "inventory.csv"
 st.set_page_config(page_title="Inventory Manager", layout="wide")
 
