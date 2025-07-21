@@ -111,51 +111,32 @@ else:
             df[col["name"]] = ""
     save_inventory(df)
 
-    # --- View Inventory --
-    if selection == "View Inventory":
-        st.title("Inventory Viewer")
-        if len(columns) == 0:
-            st.info("No columns configured yet.")
+    # --- View Inventory ---
+if selection == "View Inventory":
+    st.title("Inventory Viewer")
+    if len(columns) == 0:
+        st.info("No columns configured yet.")
+    else:
+        assigned_column_names = [col["name"] for col in columns]
+        display_columns = ["ID#"] + assigned_column_names if "ID#" in df.columns else assigned_column_names
+
+        if not df.empty:
+            st.write("Inventory Table:")
+
+            for index, row in df.iterrows():
+                cols = st.columns(len(display_columns) + 1)  # +1 for action column
+
+                for j, col_name in enumerate(display_columns):
+                    cols[j].write(row.get(col_name, ""))
+
+                if cols[-1].button("Delete", key=f"delete_{index}"):
+                    df.drop(index=index, inplace=True)
+                    df.reset_index(drop=True, inplace=True)
+                    save_inventory(df)
+                    st.success(f"Item '{row.get('ID#', index)}' deleted successfully.")
+                    st.rerun()
         else:
-            assigned_column_names = [col["name"] for col in columns]
-            if not df.empty:
-                display_df = df[assigned_column_names + ["ID#"]] if "ID#" in df.columns else df[assigned_column_names]
-                
-                st.write("Inventory Table:")
-                st.title("Inventory Viewer")
-
-if len(columns) == 0:
-    st.info("No columns configured yet.")
-else:
-    assigned_column_names = [col["name"] for col in columns]
-    if "ID#" in df.columns:
-        display_columns = ["ID#"] + assigned_column_names
-    else:
-        display_columns = assigned_column_names
-
-    if not df.empty:
-        st.write("Inventory Table:")
-
-        # Add an "Action" column manually for Delete buttons
-        for index, row in df.iterrows():
-            cols = st.columns(len(display_columns) + 1)  # +1 for Action
-
-            # Show ID# first, then rest
-            for j, col_name in enumerate(display_columns):
-                cols[j].write(row.get(col_name, ""))
-
-            # Action Column
-            if cols[-1].button("Delete", key=f"delete_{index}"):
-                df.drop(index=index, inplace=True)
-                df.reset_index(drop=True, inplace=True)
-                save_inventory(df)
-                st.success(f"Item '{row.get('ID#', index)}' deleted successfully.")
-                st.rerun()
-
-    else:
-        st.warning("Inventory is currently empty")
-            else:
-                st.warning("Inventory is currently empty")
+            st.warning("Inventory is currently empty")
 
     # --- Add Item ---
     elif selection == "Add Item":
