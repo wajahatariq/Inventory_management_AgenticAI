@@ -113,17 +113,17 @@ else:
             df[col["name"]] = ""
     save_inventory(df)  # Ensure updated df is saved
 
-    # --- View Inventory ---
+    # --- View Inventory --
     if selection == "View Inventory":
         st.title("Inventory Viewer")
         if len(columns) == 0:
             st.info("No columns configured yet.")
         else:
-            if df.empty:
+            assigned_column_names = [col["name"] for col in columns]
+            visible_df = df[assigned_column_names] if not df.empty else pd.DataFrame(columns=assigned_column_names)
+            if visible_df.empty:
                 st.warning("Inventory is currently empty")
-                st.dataframe(pd.DataFrame(columns=[col["name"] for col in columns]))
-            else:
-                st.dataframe(df)
+            st.dataframe(visible_df)
 
     # --- Add Item ---
     elif selection == "Add Item":
@@ -203,10 +203,21 @@ else:
                 st.error("Incorrect current password")
 
     # --- Column Manager ---
+        # --- Column Manager ---
     elif selection == "Column Manager":
         st.sidebar.title("Current Columns")
-        for col in columns:
-            st.sidebar.text(f"{col['name']} ({col['type']})")
+        updated_columns = []
+        for idx, col in enumerate(columns):
+            col_display = f"{col['name']} ({col['type']})"
+            col_key = f"delete_col_{idx}"
+            if st.sidebar.button(f"❌ {col_display}", key=col_key):
+                # Remove column from config and data
+                df.drop(columns=[col["name"]], inplace=True, errors='ignore')
+                save_inventory(df)
+                continue  # Skip appending to updated list
+            updated_columns.append(col)
+        columns = updated_columns
+        save_columns(columns)
 
         st.title("Manage Columns")
         with st.form("column_form"):
