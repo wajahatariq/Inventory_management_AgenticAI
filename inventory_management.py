@@ -7,7 +7,61 @@ from datetime import datetime
 
 USER_FILE = "user.csv"
 INVENTORY_FILE = "inventory.csv"
+
 st.set_page_config(page_title="Inventory Manager", layout="wide")
+
+# --- CUSTOM CSS STYLING ---
+def add_custom_style():
+    st.markdown("""
+    <style>
+        /* Background and font */
+        .stApp {
+            background: linear-gradient(to right, #e0f7fa, #ffffff);
+            font-family: 'Segoe UI', sans-serif;
+            color: #333333;
+        }
+
+        /* Sidebar */
+        section[data-testid="stSidebar"] {
+            background-color: #d0f0ff;
+        }
+
+        /* Buttons */
+        .stButton>button {
+            background-color: #007BFF;
+            color: white;
+            border-radius: 8px;
+            padding: 8px 16px;
+            border: none;
+            font-size: 16px;
+        }
+
+        .stButton>button:hover {
+            background-color: #0056b3;
+            color: white;
+        }
+
+        /* Inputs */
+        input, textarea {
+            background-color: #f0f9ff !important;
+            border-radius: 6px;
+        }
+
+        /* Headers */
+        h1, h2, h3 {
+            color: #004466;
+        }
+
+        /* Tables */
+        .stDataFrame {
+            border-radius: 10px;
+            background-color: white;
+            padding: 10px;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+add_custom_style()
 
 # --- PASSWORD HASHING ---
 def hash_password(password):
@@ -53,8 +107,8 @@ if "username" not in st.session_state:
 
 # --- LOGIN ---
 if not st.session_state.logged_in:
-    st.title("Login")
-    login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
+    st.title("🔐 Login")
+    login_tab, signup_tab = st.tabs(["🔑 Login", "🆕 Sign Up"])
 
     with login_tab:
         username = st.text_input("Username")
@@ -69,10 +123,10 @@ if not st.session_state.logged_in:
             if not user_match.empty:
                 st.session_state.logged_in = True
                 st.session_state.username = username
-                st.success("Login successful")
+                st.success("✅ Login successful")
                 st.rerun()
             else:
-                st.error("Incorrect username or password")
+                st.error("❌ Incorrect username or password")
 
     with signup_tab:
         new_username = st.text_input("New Username")
@@ -80,20 +134,20 @@ if not st.session_state.logged_in:
         if st.button("Sign Up"):
             users = load_users()
             if new_username in users.username.values:
-                st.warning("Username already exists")
+                st.warning("⚠️ Username already exists")
             else:
                 hashed = hash_password(new_password)
                 users.loc[len(users)] = [new_username, hashed]
                 save_users(users)
-                st.success("Account created! Please log in.")
+                st.success("✅ Account created! Please log in.")
 
 # --- LOGGED IN VIEW ---
 else:
-    st.sidebar.title("Navigation")
-    st.sidebar.markdown(f"**Welcome, {st.session_state.username.title()}**")
-    selection = st.sidebar.radio("Go to", ["View Inventory", "Add Item", "Ask the Agent", "Column Manager", "Change Password"])
+    st.sidebar.title("📊 Inventory Manager")
+    st.sidebar.markdown(f"**👋 Welcome, {st.session_state.username.title()}**")
+    selection = st.sidebar.radio("Navigate", ["📦 View Inventory", "➕ Add Item", "🤖 Ask the Agent", "🛠️ Column Manager", "🔑 Change Password"])
 
-    if st.sidebar.button("Logout"):
+    if st.sidebar.button("🚪 Logout"):
         st.session_state.logged_in = False
         st.session_state.username = ""
         st.rerun()
@@ -111,44 +165,42 @@ else:
             df[col["name"]] = ""
     save_inventory(df)
 
-    # --- View Inventory --
-    if selection == "View Inventory":
-        st.title("Inventory Viewer")
+    # --- View Inventory ---
+    if selection == "📦 View Inventory":
+        st.title("📦 Inventory Viewer")
         if len(columns) == 0:
-            st.info("No columns configured yet.")
+            st.info("ℹ️ No columns configured yet.")
         else:
             assigned_column_names = [col["name"] for col in columns]
             if not df.empty:
                 display_df = df[assigned_column_names + ["ID#"]] if "ID#" in df.columns else df[assigned_column_names]
-                
                 st.write("Inventory Table:")
                 for i, row in display_df.iterrows():
                     cols = st.columns(len(display_df.columns) + 1)
                     for j, col_name in enumerate(display_df.columns):
                         cols[j].write(row[col_name])
                     delete_button_key = f"delete_{i}"
-                    if cols[-1].button("Delete", key=delete_button_key):
+                    if cols[-1].button("❌ Delete", key=delete_button_key):
                         df.drop(index=i, inplace=True)
                         df.reset_index(drop=True, inplace=True)
                         save_inventory(df)
-                        st.success(f"Item '{row.get('ID#', i)}' deleted successfully.")
+                        st.success(f"✅ Item '{row.get('ID#', i)}' deleted successfully.")
                         st.rerun()
                 st.dataframe(display_df)
             else:
-                st.warning("Inventory is currently empty")
+                st.warning("⚠️ Inventory is currently empty")
 
     # --- Add Item ---
-    elif selection == "Add Item":
-        st.title("Add or Edit Inventory Item")
+    elif selection == "➕ Add Item":
+        st.title("➕ Add or Edit Inventory Item")
 
         if "ID#" not in df.columns:
             df["ID#"] = ""
 
         if len(columns) == 0:
-            st.info("No columns to add. Please add columns first.")
+            st.info("ℹ️ No columns to add. Please add columns first.")
         else:
             mode = st.radio("Mode", ["Add New Item", "Edit Existing Item"])
-
             selected_id = None
             existing_data = {}
 
@@ -158,7 +210,7 @@ else:
                     selected_id = st.selectbox("Select ID# to Edit", existing_ids)
                     existing_data = df[df["ID#"] == selected_id].iloc[0].to_dict()
                 else:
-                    st.warning("No items to edit. Add an item first.")
+                    st.warning("⚠️ No items to edit. Add an item first.")
                     st.stop()
 
             with st.form("item_form"):
@@ -175,7 +227,7 @@ else:
                 for col in columns:
                     col_name = col["name"]
                     col_type = col["type"]
-                    type_label = col_type.capitalize() if col_type.lower() in ["text", "number", "date"] else "Others"
+                    type_label = col_type.capitalize()
 
                     default = existing_data.get(col_name, "") if existing_data else ""
 
@@ -190,21 +242,21 @@ else:
                     else:
                         form_data[col_name] = st.text_input(f"{col_name.capitalize()} ({type_label})", value=default)
 
-                submitted = st.form_submit_button("Save Item")
+                submitted = st.form_submit_button("💾 Save Item")
                 if submitted:
                     if mode == "Add New Item":
                         df = pd.concat([df, pd.DataFrame([form_data])], ignore_index=True)
-                        st.success("New item added successfully.")
+                        st.success("✅ New item added successfully.")
                     else:
                         df.loc[df["ID#"] == selected_id] = form_data
-                        st.success("Item updated successfully.")
+                        st.success("✅ Item updated successfully.")
                     save_inventory(df)
 
     # --- Ask the Agent ---
-    elif selection == "Ask the Agent":
-        st.title("Ask Inventory Agent")
+    elif selection == "🤖 Ask the Agent":
+        st.title("🤖 Ask Inventory Agent")
         if df.empty:
-            st.warning("Your inventory is currently empty. Add some items before asking questions.")
+            st.warning("⚠️ Your inventory is currently empty.")
         else:
             query = st.text_input("Ask a question")
             if st.button("Submit") and query:
@@ -213,10 +265,7 @@ else:
                 inventory_data = df.fillna("").to_dict(orient="records")
 
                 messages = [
-                    {
-                        "role": "system",
-                        "content": "You are an intelligent inventory assistant. Use the data below to answer user questions. Be precise and concise. If something is not in the inventory, say so.",
-                    },
+                    {"role": "system", "content": "You are an intelligent inventory assistant. Use the data below to answer user questions. Be precise and concise. If something is not in the inventory, say so."},
                     {"role": "user", "content": f"Inventory:\n{json.dumps(inventory_data, indent=2)}"},
                     {"role": "user", "content": f"Question: {query}"},
                 ]
@@ -228,14 +277,14 @@ else:
                         api_key=st.secrets["GROQ_API_KEY"],
                     )
                     answer = response.choices[0].message.content
-                    st.success("Agent Response:")
+                    st.success("💡 Agent Response:")
                     st.write(answer)
                 except Exception as e:
-                    st.error(f"Error from Groq AI: {e}")
+                    st.error(f"❌ Error from Groq AI: {e}")
 
     # --- Change Password ---
-    elif selection == "Change Password":
-        st.title("Change Password")
+    elif selection == "🔑 Change Password":
+        st.title("🔑 Change Password")
         users = load_users()
         current_pass = st.text_input("Current Password", type="password")
         new_pass = st.text_input("New Password", type="password")
@@ -246,15 +295,15 @@ else:
                 if new_pass == confirm_pass:
                     users.loc[users.username == st.session_state.username, "password"] = hash_password(new_pass)
                     save_users(users)
-                    st.success("Password updated successfully")
+                    st.success("✅ Password updated successfully")
                 else:
-                    st.error("Passwords do not match")
+                    st.error("❌ Passwords do not match")
             else:
-                st.error("Incorrect current password")
+                st.error("❌ Incorrect current password")
 
     # --- Column Manager ---
-    elif selection == "Column Manager":
-        st.sidebar.title("Current Columns")
+    elif selection == "🛠️ Column Manager":
+        st.sidebar.title("📋 Current Columns")
         updated_columns = []
         edited_column_index = None
 
@@ -279,7 +328,7 @@ else:
         save_columns(columns)
 
         if edited_column_index is not None:
-            st.subheader("Edit Column")
+            st.subheader("✏️ Edit Column")
             col_to_edit = columns[edited_column_index]
             new_name = st.text_input("New Column Name", value=col_to_edit["name"])
             new_type = st.selectbox("Column Type", ["text", "number", "date"], index=["text", "number", "date"].index(col_to_edit["type"]))
@@ -289,10 +338,10 @@ else:
                 columns[edited_column_index] = {"name": new_name, "type": new_type}
                 save_columns(columns)
                 save_inventory(df)
-                st.success("Column updated successfully")
+                st.success("✅ Column updated successfully")
                 st.rerun()
 
-        st.title("Manage Columns")
+        st.title("➕ Manage Columns")
         with st.form("column_form"):
             new_col = st.text_input("New Column Name")
             col_type = st.selectbox("Select Column Type", ["text", "number", "date"])
@@ -304,7 +353,7 @@ else:
                     if new_col not in df.columns:
                         df[new_col] = ""
                     save_inventory(df)
-                    st.success("Column added successfully")
+                    st.success("✅ Column added successfully")
                     st.rerun()
                 else:
-                    st.warning("Column already exists")
+                    st.warning("⚠️ Column already exists")
