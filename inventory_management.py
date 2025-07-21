@@ -57,7 +57,11 @@ if not st.session_state.logged_in:
         password = st.text_input("Password", type="password")
         if st.button("Login"):
             users = load_users()
-            if ((users.username == username) & (users.password == password)).any():
+            user_match = users[
+                (users["username"].str.strip() == username.strip()) &
+                (users["password"].astype(str).str.strip() == password.strip())
+            ]
+            if not user_match.empty:
                 st.session_state.logged_in = True
                 st.session_state.username = username
                 st.success("Login successful")
