@@ -114,9 +114,18 @@ else:
     # --- View Inventory ---
     if selection == "View Inventory":
         st.title("Inventory Viewer")
+
         if len(columns) == 0:
             st.info("No columns configured yet.")
         else:
+            # ✅ Show user-defined columns as a table
+            st.markdown("### Columns Added by You")
+            col_data = {
+                "Field": [f"Column {i+1}" for i in range(len(columns))],
+                "Name": [col["name"] for col in columns]
+            }
+            st.table(pd.DataFrame(col_data))
+
             assigned_column_names = [col["name"] for col in columns]
             display_columns = ["ID#"] + assigned_column_names
 
@@ -290,13 +299,6 @@ else:
                 st.rerun()
 
         st.title("Manage Columns")
-
-        # ✅ ADDED: Show user-defined column names
-        if columns:
-            st.markdown("### Current Column Names")
-            col_names = [col["name"] for col in columns]
-            st.code("\n".join(col_names))
-
         with st.form("column_form"):
             new_col = st.text_input("New Column Name")
             col_type = st.selectbox("Select Column Type", ["text", "number", "date"])
