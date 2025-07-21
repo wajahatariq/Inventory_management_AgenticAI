@@ -204,21 +204,50 @@ else:
 
     # --- Column Manager ---
         # --- Column Manager ---
+        # --- Column Manager ---
     elif selection == "Column Manager":
         st.sidebar.title("Current Columns")
         updated_columns = []
+        edited_column_index = None
+
         for idx, col in enumerate(columns):
-            col_display = f"{col['name']} ({col['type']})"
-            col_key = f"delete_col_{idx}"
-            if st.sidebar.button(f"❌ {col_display}", key=col_key):
-                # Remove column from config and data
-                df.drop(columns=[col["name"]], inplace=True, errors='ignore')
+            col_name = col['name']
+            col_type = col['type']
+
+            col_container = st.sidebar.container()
+            col1, col2, col3 = col_container.columns([2, 1, 1])
+
+            col1.markdown(f"**{col_name} ({col_type})**")
+            if col2.button("✏️", key=f"edit_col_{idx}"):
+                edited_column_index = idx
+            if col3.button("🗑️", key=f"delete_col_{idx}"):
+                df.drop(columns=[col_name], inplace=True, errors='ignore')
                 save_inventory(df)
-                continue  # Skip appending to updated list
+                continue  # Skip adding to updated list
+
             updated_columns.append(col)
+
         columns = updated_columns
         save_columns(columns)
 
+        # --- Edit Column Section ---
+        if edited_column_index is not None:
+            st.subheader("Edit Column")
+            col_to_edit = columns[edited_column_index]
+            new_name = st.text_input("New Column Name", value=col_to_edit["name"])
+            new_type = st.selectbox("Column Type", ["text", "number", "date"], index=["text", "number", "date"].index(col_to_edit["type"]))
+            if st.button("Update Column"):
+                # Rename column in DataFrame
+                if new_name != col_to_edit["name"]:
+                    df.rename(columns={col_to_edit["name"]: new_name}, inplace=True)
+                # Update in columns config
+                columns[edited_column_index] = {"name": new_name, "type": new_type}
+                save_columns(columns)
+                save_inventory(df)
+                st.success("Column updated successfully")
+                st.rerun()
+
+        # --- Add Column Section ---
         st.title("Manage Columns")
         with st.form("column_form"):
             new_col = st.text_input("New Column Name")
@@ -232,5 +261,6 @@ else:
                         df[new_col] = ""
                     save_inventory(df)
                     st.success("Column added successfully")
+                    st.rerun()
                 else:
                     st.warning("Column already exists")
