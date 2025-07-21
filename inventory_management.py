@@ -1,316 +1,123 @@
 import streamlit as st
 import pandas as pd
-import os
 import json
-import hashlib
-from datetime import datetime
+import os
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
-USER_FILE = "user.csv"
-INVENTORY_FILE = "inventory.csv"
-st.set_page_config(page_title="Inventory Manager", layout="wide")
+# File paths
+COLUMN_CONFIG_FILE = "column_config.json"
+INVENTORY_FILE = "inventory_data.csv"
 
-# --- PASSWORD HASHING ---
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-# Load or initialize user data
-def load_users():
-    if os.path.exists(USER_FILE):
-        return pd.read_csv(USER_FILE)
-    else:
-        return pd.DataFrame(columns=["username", "password"])
-
-def save_users(users_df):
-    users_df.to_csv(USER_FILE, index=False)
-
-# Load or initialize inventory data
-def load_inventory():
-    if os.path.exists(INVENTORY_FILE):
-        return pd.read_csv(INVENTORY_FILE)
-    else:
-        return pd.DataFrame()
-
-def save_inventory(df):
-    df.to_csv(INVENTORY_FILE, index=False)
-
-# Column config: [{"name": "item", "type": "text"}, ...]
-def save_columns(columns):
-    with open("columns.json", "w") as f:
-        json.dump(columns, f)
-
+# Load column configuration
 def load_columns():
-    if os.path.exists("columns.json"):
-        with open("columns.json", "r") as f:
+    if os.path.exists(COLUMN_CONFIG_FILE):
+        with open(COLUMN_CONFIG_FILE, "r") as f:
             return json.load(f)
     return []
 
-# --- SESSION INIT ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+# Save column configuration
+def save_columns(columns):
+    with open(COLUMN_CONFIG_FILE, "w") as f:
+        json.dump(columns, f)
 
-if "username" not in st.session_state:
-    st.session_state.username = ""
+# Load inventory
+def load_inventory():
+    if os.path.exists(INVENTORY_FILE):
+        return pd.read_csv(INVENTORY_FILE)
+    return pd.DataFrame()
 
-# --- LOGIN ---
-if not st.session_state.logged_in:
-    st.title("Login")
-    login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
+# Save inventory
+def save_inventory(df):
+    df.to_csv(INVENTORY_FILE, index=False)
 
-    with login_tab:
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        if st.button("Login"):
-            users = load_users()
-            hashed = hash_password(password)
-            user_match = users[
-                (users["username"].str.strip() == username.strip()) &
-                (users["password"] == hashed)
-            ]
-            if not user_match.empty:
-                st.session_state.logged_in = True
-                st.session_state.username = username
-                st.success("Login successful")
-                st.rerun()
-            else:
-                st.error("Incorrect username or password")
+# Streamlit App
+st.set_page_config(page_title="Inventory Manager", layout="wide")
+st.sidebar.title("Inventory Menu")
+selection = st.sidebar.radio("Go to", ["Column Manager", "Add Item", "View Inventory"])
 
-    with signup_tab:
-        new_username = st.text_input("New Username")
-        new_password = st.text_input("New Password", type="password")
-        if st.button("Sign Up"):
-            users = load_users()
-            if new_username in users.username.values:
-                st.warning("Username already exists")
-            else:
-                hashed = hash_password(new_password)
-                users.loc[len(users)] = [new_username, hashed]
-                save_users(users)
-                st.success("Account created! Please log in.")
+# Global State
+columns = load_columns()
+df = load_inventory()
 
-# --- LOGGED IN VIEW ---
-else:
-    st.sidebar.title("Navigation")
-    st.sidebar.markdown(f"**Welcome, {st.session_state.username.title()}**")
-    selection = st.sidebar.radio("Go to", ["View Inventory", "Add Item", "Ask the Agent", "Column Manager", "Change Password"])
+# --- Column Manager ---
+if selection == "Column Manager":
+    st.title("Column Manager")
+    col1, col2 = st.columns(2)
+    with col1:
+        new_col_name = st.text_input("Column Name")
+    with col2:
+        new_col_type = st.selectbox("Column Type", ["text", "number", "date"])
 
-    if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.session_state.username = ""
-        st.rerun()
-
-    columns = load_columns()
-    if columns and isinstance(columns[0], str):
-        columns = [{"name": col, "type": "text"} for col in columns]
-        save_columns(columns)
-
-    df = load_inventory()
-    for col in columns:
-        if col["name"] not in df.columns:
-            df[col["name"]] = ""
-    if "ID#" not in df.columns:
-        df["ID#"] = [f"ID{idx+1:04d}" for idx in range(len(df))]
-    save_inventory(df)
-
-    # --- View Inventory ---
-    if selection == "View Inventory":
-        st.title("Inventory Viewer")
-
-        if len(columns) == 0:
-            st.info("No columns configured yet.")
+    if st.button("Add Column"):
+        if new_col_name.strip() == "":
+            st.error("Column name cannot be empty")
         else:
-            # ✅ Show user-defined columns as a table
-            st.markdown("### Columns Added by You")
-            col_data = {
-                "Field": [f"Column {i+1}" for i in range(len(columns))],
-                "Name": [col["name"] for col in columns]
+            columns.append({"name": new_col_name.strip(), "type": new_col_type})
+            save_columns(columns)
+            st.success(f"Column '{new_col_name}' added successfully.")
+
+# --- Add Item ---
+if selection == "Add Item":
+    st.title("Add Inventory Item")
+    if not columns:
+        st.warning("No columns defined. Please add columns in Column Manager.")
+    else:
+        form_data = {}
+        for col in columns:
+            if col["type"] == "text":
+                form_data[col["name"]] = st.text_input(col["name"])
+            elif col["type"] == "number":
+                form_data[col["name"]] = st.number_input(col["name"], value=0.0)
+            elif col["type"] == "date":
+                form_data[col["name"]] = st.date_input(col["name"])
+
+        if st.button("Add Item"):
+            new_row = {"ID#": len(df) + 1}
+            new_row.update(form_data)
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            save_inventory(df)
+            st.success("Item added successfully.")
+
+# --- View Inventory ---
+if selection == "View Inventory":
+    st.title("Inventory Viewer")
+
+    if len(columns) == 0:
+        st.info("No columns configured yet.")
+    elif df.empty:
+        st.warning("Inventory is currently empty")
+    else:
+        assigned_column_names = [col["name"] for col in columns]
+        display_columns = ["ID#"] + assigned_column_names
+
+        # Add Delete button column
+        df_display = df.copy()
+        df_display["🗑️ Delete"] = "Click"
+
+        st.markdown("### Inventory Table (Click a row's Delete cell to remove it)")
+        gb = GridOptionsBuilder.from_dataframe(df_display[display_columns + ["🗑️ Delete"]])
+        gb.configure_column("🗑️ Delete", editable=False, cellRenderer="""
+            function(params) {
+                return `<button style="padding:2px 5px;color:white;background-color:red;border:none;border-radius:4px;cursor:pointer;">🗑️ Delete</button>`;
             }
-            st.table(pd.DataFrame(col_data))
+        """)
+        gb.configure_selection("single", use_checkbox=False)
+        grid_options = gb.build()
 
-            assigned_column_names = [col["name"] for col in columns]
-            display_columns = ["ID#"] + assigned_column_names
+        grid_response = AgGrid(
+            df_display[display_columns + ["🗑️ Delete"]],
+            gridOptions=grid_options,
+            update_mode=GridUpdateMode.MODEL_CHANGED,
+            allow_unsafe_jscode=True,
+            height=400,
+            theme="streamlit"
+        )
 
-            if not df.empty:
-                st.write("Inventory Table:")
-
-                for index, row in df.iterrows():
-                    cols = st.columns(len(display_columns) + 1)  # +1 for Action column
-
-                    for j, col_name in enumerate(display_columns):
-                        cols[j].write(row.get(col_name, ""))
-
-                    if cols[-1].button("Delete", key=f"delete_{index}"):
-                        df.drop(index=index, inplace=True)
-                        df.reset_index(drop=True, inplace=True)
-                        save_inventory(df)
-                        st.success(f"Item '{row.get('ID#', index)}' deleted successfully.")
-                        st.rerun()
-            else:
-                st.warning("Inventory is currently empty")
-
-    # --- Add Item ---
-    elif selection == "Add Item":
-        st.title("Add or Edit Inventory Item")
-
-        if len(columns) == 0:
-            st.info("No columns to add. Please add columns first.")
-        else:
-            mode = st.radio("Mode", ["Add New Item", "Edit Existing Item"])
-            selected_id = None
-            existing_data = {}
-
-            if mode == "Edit Existing Item":
-                existing_ids = df["ID#"].dropna().unique().tolist()
-                if existing_ids:
-                    selected_id = st.selectbox("Select ID# to Edit", existing_ids)
-                    existing_data = df[df["ID#"] == selected_id].iloc[0].to_dict()
-                else:
-                    st.warning("No items to edit. Add an item first.")
-                    st.stop()
-
-            with st.form("item_form"):
-                form_data = {}
-
-                if mode == "Add New Item":
-                    new_id = f"ID{len(df) + 1:04d}"
-                    st.text_input("ID#", value=new_id, disabled=True)
-                    form_data["ID#"] = new_id
-                else:
-                    st.text_input("ID#", value=selected_id, disabled=True)
-                    form_data["ID#"] = selected_id
-
-                for col in columns:
-                    col_name = col["name"]
-                    col_type = col["type"]
-                    type_label = col_type.capitalize()
-
-                    default = existing_data.get(col_name, "") if existing_data else ""
-
-                    if col_type == "number":
-                        form_data[col_name] = st.number_input(f"{col_name} ({type_label})", value=float(default) if str(default).replace('.', '', 1).isdigit() else 0.0)
-                    elif col_type == "date":
-                        try:
-                            default_date = datetime.strptime(default, "%Y-%m-%d").date() if default else datetime.today().date()
-                        except:
-                            default_date = datetime.today().date()
-                        form_data[col_name] = st.date_input(f"{col_name} ({type_label})", value=default_date).strftime("%Y-%m-%d")
-                    else:
-                        form_data[col_name] = st.text_input(f"{col_name} ({type_label})", value=default)
-
-                submitted = st.form_submit_button("Save Item")
-                if submitted:
-                    if mode == "Add New Item":
-                        df = pd.concat([df, pd.DataFrame([form_data])], ignore_index=True)
-                        st.success("New item added successfully.")
-                    else:
-                        df.loc[df["ID#"] == selected_id] = form_data
-                        st.success("Item updated successfully.")
-                    save_inventory(df)
-
-    # --- Ask the Agent ---
-    elif selection == "Ask the Agent":
-        st.title("Ask Inventory Agent")
-        if df.empty:
-            st.warning("Your inventory is currently empty. Add some items before asking questions.")
-        else:
-            query = st.text_input("Ask a question")
-            if st.button("Submit") and query:
-                from litellm import completion
-
-                inventory_data = df.fillna("").to_dict(orient="records")
-
-                messages = [
-                    {
-                        "role": "system",
-                        "content": "You are an intelligent inventory assistant. Use the data below to answer user questions. Be precise and concise. If something is not in the inventory, say so.",
-                    },
-                    {"role": "user", "content": f"Inventory:\n{json.dumps(inventory_data, indent=2)}"},
-                    {"role": "user", "content": f"Question: {query}"},
-                ]
-
-                try:
-                    response = completion(
-                        model="groq/llama3-8b-8192",
-                        messages=messages,
-                        api_key=st.secrets["GROQ_API_KEY"],
-                    )
-                    answer = response.choices[0].message.content
-                    st.success("Agent Response:")
-                    st.write(answer)
-                except Exception as e:
-                    st.error(f"Error from Groq AI: {e}")
-
-    # --- Change Password ---
-    elif selection == "Change Password":
-        st.title("Change Password")
-        users = load_users()
-        current_pass = st.text_input("Current Password", type="password")
-        new_pass = st.text_input("New Password", type="password")
-        confirm_pass = st.text_input("Confirm New Password", type="password")
-        if st.button("Update Password"):
-            hashed_current = hash_password(current_pass)
-            if ((users.username == st.session_state.username) & (users.password == hashed_current)).any():
-                if new_pass == confirm_pass:
-                    users.loc[users.username == st.session_state.username, "password"] = hash_password(new_pass)
-                    save_users(users)
-                    st.success("Password updated successfully")
-                else:
-                    st.error("Passwords do not match")
-            else:
-                st.error("Incorrect current password")
-
-    # --- Column Manager ---
-    elif selection == "Column Manager":
-        st.sidebar.title("Current Columns")
-        updated_columns = []
-        edited_column_index = None
-
-        for idx, col in enumerate(columns):
-            col_name = col['name']
-            col_type = col['type']
-
-            col_container = st.sidebar.container()
-            col1, col2, col3 = col_container.columns([2, 1, 1])
-
-            col1.markdown(f"**{col_name} ({col_type})**")
-            if col2.button("✏️", key=f"edit_col_{idx}"):
-                edited_column_index = idx
-            if col3.button("🗑️", key=f"delete_col_{idx}"):
-                df.drop(columns=[col_name], inplace=True, errors='ignore')
-                save_inventory(df)
-                continue
-
-            updated_columns.append(col)
-
-        columns = updated_columns
-        save_columns(columns)
-
-        if edited_column_index is not None:
-            st.subheader("Edit Column")
-            col_to_edit = columns[edited_column_index]
-            new_name = st.text_input("New Column Name", value=col_to_edit["name"])
-            new_type = st.selectbox("Column Type", ["text", "number", "date"], index=["text", "number", "date"].index(col_to_edit["type"]))
-            if st.button("Update Column"):
-                if new_name != col_to_edit["name"]:
-                    df.rename(columns={col_to_edit["name"]: new_name}, inplace=True)
-                columns[edited_column_index] = {"name": new_name, "type": new_type}
-                save_columns(columns)
-                save_inventory(df)
-                st.success("Column updated successfully")
-                st.rerun()
-
-        st.title("Manage Columns")
-        with st.form("column_form"):
-            new_col = st.text_input("New Column Name")
-            col_type = st.selectbox("Select Column Type", ["text", "number", "date"])
-            submitted = st.form_submit_button("Add Column")
-            if submitted and new_col:
-                if not any(c["name"].lower() == new_col.lower() for c in columns):
-                    columns.append({"name": new_col, "type": col_type})
-                    save_columns(columns)
-                    if new_col not in df.columns:
-                        df[new_col] = ""
-                    save_inventory(df)
-                    st.success("Column added successfully")
-                    st.rerun()
-                else:
-                    st.warning("Column already exists")
+        # Detect click on delete button
+        selected = grid_response["selected_rows"]
+        if selected:
+            row_id = selected[0]["ID#"]
+            df = df[df["ID#"] != row_id].reset_index(drop=True)
+            save_inventory(df)
+            st.success(f"Item with ID {row_id} deleted successfully.")
+            st.rerun()
