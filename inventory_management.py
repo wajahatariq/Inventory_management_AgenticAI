@@ -7,7 +7,7 @@ from datetime import datetime
 
 USER_FILE = "users.csv"
 INVENTORY_FILE = "inventory.csv"
-
+rm users.csv
 st.set_page_config(page_title="Inventory Manager", layout="wide")
 
 # --- PASSWORD HASHING ---
