@@ -1,123 +1,129 @@
 import streamlit as st
 import pandas as pd
-import json
-import os
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+from litellm import completion
 
-# File paths
-COLUMN_CONFIG_FILE = "column_config.json"
-INVENTORY_FILE = "inventory_data.csv"
+# ---------------------------
+# Session State Initialization
+# ---------------------------
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame()
 
-# Load column configuration
-def load_columns():
-    if os.path.exists(COLUMN_CONFIG_FILE):
-        with open(COLUMN_CONFIG_FILE, "r") as f:
-            return json.load(f)
-    return []
+if "columns" not in st.session_state:
+    st.session_state.columns = []
 
-# Save column configuration
-def save_columns(columns):
-    with open(COLUMN_CONFIG_FILE, "w") as f:
-        json.dump(columns, f)
+df = st.session_state.df
+columns = st.session_state.columns
 
-# Load inventory
-def load_inventory():
-    if os.path.exists(INVENTORY_FILE):
-        return pd.read_csv(INVENTORY_FILE)
-    return pd.DataFrame()
+# ---------------------------
+# Sidebar Menu
+# ---------------------------
+with st.sidebar:
+    st.title("🧠 Inventory Manager")
+    selection = st.radio("Go to", ["Add Column", "Add Inventory", "View Inventory", "Ask Inventory Agent"])
+    
+    # Delete Column Logic
+    if len(columns) > 0:
+        if st.button("🗑️ Delete Last Column"):
+            deleted = columns.pop()
+            if deleted["name"] in df.columns:
+                df.drop(columns=[deleted["name"]], inplace=True)
+            st.success(f"Deleted column: {deleted['name']}")
 
-# Save inventory
-def save_inventory(df):
-    df.to_csv(INVENTORY_FILE, index=False)
-
-# Streamlit App
-st.set_page_config(page_title="Inventory Manager", layout="wide")
-st.sidebar.title("Inventory Menu")
-selection = st.sidebar.radio("Go to", ["Column Manager", "Add Item", "View Inventory"])
-
-# Global State
-columns = load_columns()
-df = load_inventory()
-
-# --- Column Manager ---
-if selection == "Column Manager":
-    st.title("Column Manager")
-    col1, col2 = st.columns(2)
-    with col1:
-        new_col_name = st.text_input("Column Name")
-    with col2:
-        new_col_type = st.selectbox("Column Type", ["text", "number", "date"])
-
+# ---------------------------
+# Add Column
+# ---------------------------
+if selection == "Add Column":
+    st.header("Add New Column to Inventory")
+    new_col = st.text_input("Enter new column name")
+    new_type = st.selectbox("Select column type", ["text", "number", "date"])
     if st.button("Add Column"):
-        if new_col_name.strip() == "":
-            st.error("Column name cannot be empty")
+        if new_col and new_col not in [col["name"] for col in columns]:
+            columns.append({"name": new_col, "type": new_type})
+            st.success(f"Column '{new_col}' added!")
         else:
-            columns.append({"name": new_col_name.strip(), "type": new_col_type})
-            save_columns(columns)
-            st.success(f"Column '{new_col_name}' added successfully.")
+            st.warning("Enter unique column name.")
 
-# --- Add Item ---
-if selection == "Add Item":
-    st.title("Add Inventory Item")
-    if not columns:
-        st.warning("No columns defined. Please add columns in Column Manager.")
+# ---------------------------
+# Add Inventory
+# ---------------------------
+if selection == "Add Inventory":
+    st.header("Add Inventory Item")
+
+    if len(columns) == 0:
+        st.warning("Add columns first from the sidebar.")
     else:
-        form_data = {}
+        item = {}
+        item["ID#"] = len(df) + 1
         for col in columns:
+            label = col["name"]
             if col["type"] == "text":
-                form_data[col["name"]] = st.text_input(col["name"])
+                item[label] = st.text_input(label)
             elif col["type"] == "number":
-                form_data[col["name"]] = st.number_input(col["name"], value=0.0)
+                item[label] = st.number_input(label)
             elif col["type"] == "date":
-                form_data[col["name"]] = st.date_input(col["name"])
-
+                item[label] = st.date_input(label)
         if st.button("Add Item"):
-            new_row = {"ID#": len(df) + 1}
-            new_row.update(form_data)
-            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-            save_inventory(df)
-            st.success("Item added successfully.")
+            df.loc[len(df)] = item
+            st.success("Item added successfully!")
 
-# --- View Inventory ---
+# ---------------------------
+# View Inventory (AgGrid)
+# ---------------------------
 if selection == "View Inventory":
-    st.title("Inventory Viewer")
+    st.title("📦 Inventory Viewer")
 
     if len(columns) == 0:
         st.info("No columns configured yet.")
-    elif df.empty:
-        st.warning("Inventory is currently empty")
     else:
         assigned_column_names = [col["name"] for col in columns]
         display_columns = ["ID#"] + assigned_column_names
 
-        # Add Delete button column
-        df_display = df.copy()
-        df_display["🗑️ Delete"] = "Click"
+        if not df.empty:
+            st.markdown("### Inventory Table")
 
-        st.markdown("### Inventory Table (Click a row's Delete cell to remove it)")
-        gb = GridOptionsBuilder.from_dataframe(df_display[display_columns + ["🗑️ Delete"]])
-        gb.configure_column("🗑️ Delete", editable=False, cellRenderer="""
-            function(params) {
-                return `<button style="padding:2px 5px;color:white;background-color:red;border:none;border-radius:4px;cursor:pointer;">🗑️ Delete</button>`;
-            }
-        """)
-        gb.configure_selection("single", use_checkbox=False)
-        grid_options = gb.build()
+            # Setup AgGrid
+            gb = GridOptionsBuilder.from_dataframe(df[display_columns])
+            gb.configure_default_column(editable=False, groupable=True)
+            gb.configure_selection(selection_mode="single", use_checkbox=True)
+            grid_options = gb.build()
 
-        grid_response = AgGrid(
-            df_display[display_columns + ["🗑️ Delete"]],
-            gridOptions=grid_options,
-            update_mode=GridUpdateMode.MODEL_CHANGED,
-            allow_unsafe_jscode=True,
-            height=400,
-            theme="streamlit"
-        )
+            grid_response = AgGrid(
+                df[display_columns],
+                gridOptions=grid_options,
+                update_mode=GridUpdateMode.SELECTION_CHANGED,
+                enable_enterprise_modules=False,
+                height=400,
+                fit_columns_on_grid_load=True
+            )
 
-        # Detect click on delete button
-        selected = grid_response["selected_rows"]
-        if selected:
-            row_id = selected[0]["ID#"]
-            df = df[df["ID#"] != row_id].reset_index(drop=True)
-            save_inventory(df)
-            st.success(f"Item with ID {row_id} deleted successfully.")
-            st.rerun()
+            selected_rows = grid_response["selected_rows"]
+            if selected_rows:
+                selected_index = selected_rows[0]["_selectedRowNodeInfo"]["nodeRowIndex"]
+                if st.button("Delete Selected Row"):
+                    df.drop(index=selected_index, inplace=True)
+                    df.reset_index(drop=True, inplace=True)
+                    st.success("Row deleted.")
+        else:
+            st.warning("Inventory is currently empty.")
+
+# ---------------------------
+# Ask Inventory Agent (Groq)
+# ---------------------------
+if selection == "Ask Inventory Agent":
+    st.header("🤖 Ask Inventory Agent")
+    user_question = st.text_input("What do you want to know about the inventory?")
+    if st.button("Ask"):
+        try:
+            system_prompt = f"You are an inventory management assistant. The current inventory columns are: {', '.join([col['name'] for col in columns])}."
+            user_prompt = f"User Question: {user_question}"
+            response = completion(
+                model="groq/llama3-8b-8192",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ]
+            )
+            st.write("**Answer:**", response['choices'][0]['message']['content'])
+        except Exception as e:
+            st.error(f"Error querying Groq AI: {e}")
