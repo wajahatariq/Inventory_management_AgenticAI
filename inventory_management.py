@@ -122,18 +122,22 @@ else:
                 display_df = df[assigned_column_names + ["ID#"]] if "ID#" in df.columns else df[assigned_column_names]
                 
                 st.write("Inventory Table:")
-                for i, row in display_df.iterrows():
-                    cols = st.columns(len(display_df.columns) + 1)
-                    for j, col_name in enumerate(display_df.columns):
-                        cols[j].write(row[col_name])
-                    delete_button_key = f"delete_{i}"
-                    if cols[-1].button("Delete", key=delete_button_key):
+
+                display_columns = [col["name"] for col in columns]
+                if "ID#" in df.columns:
+                    display_columns = ["ID#"] + display_columns
+                
+                for i, row in df.iterrows():
+                    cols = st.columns(len(display_columns) + 1)  # +1 for "Action" column
+                    for j, col_name in enumerate(display_columns):
+                        cols[j].write(str(row.get(col_name, "")))
+                    if cols[-1].button("Delete", key=f"delete_{i}"):
                         df.drop(index=i, inplace=True)
                         df.reset_index(drop=True, inplace=True)
                         save_inventory(df)
-                        st.success(f"Item '{row.get('ID#', i)}' deleted successfully.")
+                        st.success("Item deleted successfully.")
                         st.rerun()
-                st.dataframe(display_df)
+
             else:
                 st.warning("Inventory is currently empty")
 
