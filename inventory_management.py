@@ -16,16 +16,11 @@ def add_custom_style():
     <style>
         .stApp {
             background-color: #121212;
-            color: #f0f0f0;
-            font-family: 'Segoe UI', sans-serif;
+            color: white;
         }
 
         section[data-testid="stSidebar"] {
             background-color: #1a1a1a;
-            color: white;
-        }
-
-        section[data-testid="stSidebar"] .css-1d391kg, .css-1v3fvcr {
             color: white;
         }
 
@@ -37,8 +32,6 @@ def add_custom_style():
             background-color: #e50914;
             color: white;
             border-radius: 5px;
-            padding: 8px 16px;
-            border: none;
         }
 
         .stButton>button:hover {
@@ -54,11 +47,6 @@ def add_custom_style():
 
         .stTextInput>div>div>input {
             color: white;
-        }
-
-        .stAlert {
-            border-radius: 5px;
-            padding: 10px;
         }
 
         .stDataFrame {
@@ -176,6 +164,5 @@ else:
             df[col["name"]] = ""
     save_inventory(df)
 
-    # ✏️ and 🗑️ emojis are kept in Column Manager (sidebar)
-
-    # ... (The rest of your code remains unchanged and continues as before)
+    st.title(selection)
+    st.write("This is a placeholder for the '" + selection + "' page content.")
