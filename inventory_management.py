@@ -99,57 +99,53 @@ else:
         st.rerun()
 
     columns = load_columns()
-
     if columns and isinstance(columns[0], str):
         columns = [{"name": col, "type": "text"} for col in columns]
         save_columns(columns)
 
     df = load_inventory()
-
     for col in columns:
         if col["name"] not in df.columns:
             df[col["name"]] = ""
+    if "ID#" not in df.columns:
+        df["ID#"] = [f"ID{idx+1:04d}" for idx in range(len(df))]
     save_inventory(df)
 
     # --- View Inventory ---
-if selection == "View Inventory":
-    st.title("Inventory Viewer")
-    if len(columns) == 0:
-        st.info("No columns configured yet.")
-    else:
-        assigned_column_names = [col["name"] for col in columns]
-        display_columns = ["ID#"] + assigned_column_names if "ID#" in df.columns else assigned_column_names
-
-        if not df.empty:
-            st.write("Inventory Table:")
-
-            for index, row in df.iterrows():
-                cols = st.columns(len(display_columns) + 1)  # +1 for action column
-
-                for j, col_name in enumerate(display_columns):
-                    cols[j].write(row.get(col_name, ""))
-
-                if cols[-1].button("Delete", key=f"delete_{index}"):
-                    df.drop(index=index, inplace=True)
-                    df.reset_index(drop=True, inplace=True)
-                    save_inventory(df)
-                    st.success(f"Item '{row.get('ID#', index)}' deleted successfully.")
-                    st.rerun()
+    if selection == "View Inventory":
+        st.title("Inventory Viewer")
+        if len(columns) == 0:
+            st.info("No columns configured yet.")
         else:
-            st.warning("Inventory is currently empty")
+            assigned_column_names = [col["name"] for col in columns]
+            display_columns = ["ID#"] + assigned_column_names
+
+            if not df.empty:
+                st.write("Inventory Table:")
+
+                for index, row in df.iterrows():
+                    cols = st.columns(len(display_columns) + 1)  # +1 for Action column
+
+                    for j, col_name in enumerate(display_columns):
+                        cols[j].write(row.get(col_name, ""))
+
+                    if cols[-1].button("Delete", key=f"delete_{index}"):
+                        df.drop(index=index, inplace=True)
+                        df.reset_index(drop=True, inplace=True)
+                        save_inventory(df)
+                        st.success(f"Item '{row.get('ID#', index)}' deleted successfully.")
+                        st.rerun()
+            else:
+                st.warning("Inventory is currently empty")
 
     # --- Add Item ---
     elif selection == "Add Item":
         st.title("Add or Edit Inventory Item")
 
-        if "ID#" not in df.columns:
-            df["ID#"] = ""
-
         if len(columns) == 0:
             st.info("No columns to add. Please add columns first.")
         else:
             mode = st.radio("Mode", ["Add New Item", "Edit Existing Item"])
-
             selected_id = None
             existing_data = {}
 
@@ -176,20 +172,20 @@ if selection == "View Inventory":
                 for col in columns:
                     col_name = col["name"]
                     col_type = col["type"]
-                    type_label = col_type.capitalize() if col_type.lower() in ["text", "number", "date"] else "Others"
+                    type_label = col_type.capitalize()
 
                     default = existing_data.get(col_name, "") if existing_data else ""
 
                     if col_type == "number":
-                        form_data[col_name] = st.number_input(f"{col_name.capitalize()} ({type_label})", value=float(default) if str(default).replace('.', '', 1).isdigit() else 0.0)
+                        form_data[col_name] = st.number_input(f"{col_name} ({type_label})", value=float(default) if str(default).replace('.', '', 1).isdigit() else 0.0)
                     elif col_type == "date":
                         try:
                             default_date = datetime.strptime(default, "%Y-%m-%d").date() if default else datetime.today().date()
                         except:
                             default_date = datetime.today().date()
-                        form_data[col_name] = st.date_input(f"{col_name.capitalize()} ({type_label})", value=default_date).strftime("%Y-%m-%d")
+                        form_data[col_name] = st.date_input(f"{col_name} ({type_label})", value=default_date).strftime("%Y-%m-%d")
                     else:
-                        form_data[col_name] = st.text_input(f"{col_name.capitalize()} ({type_label})", value=default)
+                        form_data[col_name] = st.text_input(f"{col_name} ({type_label})", value=default)
 
                 submitted = st.form_submit_button("Save Item")
                 if submitted:
