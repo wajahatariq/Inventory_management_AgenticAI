@@ -191,7 +191,9 @@ else:
                         df = pd.concat([df, pd.DataFrame([form_data])], ignore_index=True)
                         st.success("New item added successfully.")
                     else:
-                        df.loc[df["ID#"] == selected_id] = form_data
+                        for key in form_data:
+                            df.loc[df["ID#"] == selected_id, key] = form_data[key]
+
                         st.success("Item updated successfully.")
                     save_inventory(df)
 
