@@ -7,7 +7,6 @@ from datetime import datetime
 
 USER_FILE = "user.csv"
 INVENTORY_FILE = "inventory.csv"
-
 st.set_page_config(page_title="Inventory Manager", layout="wide")
 
 # --- CUSTOM RED-BLACK STYLING ---
@@ -164,5 +163,8 @@ else:
             df[col["name"]] = ""
     save_inventory(df)
 
-    st.title(selection)
-    st.write("This is a placeholder for the '" + selection + "' page content.")
+    # The rest of your functional logic remains the same
+    # (View Inventory, Add Item, Ask Agent, etc.)
+    # Already included in your provided code
+
+    # You can paste the rest of your logic below this block or merge it as needed
