@@ -53,18 +53,18 @@ if not st.session_state.logged_in:
     login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
 
     with login_tab:
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    if st.button("Login"):
-        users = load_users()
-        if ((users.username == username) & (users.password == password)).any():
-            st.session_state.logged_in = True
-            st.session_state.username = username
-            st.success("Login successful")
-            st.rerun()
-            st.stop()
-        else:
-            st.error("Incorrect username or password")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            users = load_users()
+            if ((users.username == username) & (users.password == password)).any():
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.success("Login successful")
+                st.rerun()
+                st.stop()
+            else:
+                st.error("Incorrect username or password")
 
     with signup_tab:
         new_username = st.text_input("New Username")
