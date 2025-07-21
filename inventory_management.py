@@ -266,9 +266,9 @@ else:
             col1, col2, col3 = col_container.columns([2, 1, 1])
 
             col1.markdown(f"**{col_name} ({col_type})**")
-            if col2.button("Edit", key=f"edit_col_{idx}"):
+            if col2.button("✏️", key=f"edit_col_{idx}"):
                 edited_column_index = idx
-            if col3.button("Delete", key=f"delete_col_{idx}"):
+            if col3.button("🗑️", key=f"delete_col_{idx}"):
                 df.drop(columns=[col_name], inplace=True, errors='ignore')
                 save_inventory(df)
                 continue
