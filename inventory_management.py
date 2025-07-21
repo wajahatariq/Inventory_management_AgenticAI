@@ -90,7 +90,7 @@ if not st.session_state.logged_in:
 # --- LOGGED IN VIEW ---
 else:
     st.sidebar.title("Navigation")
-    st.sidebar.markdown(f"👤 **Welcome, {st.session_state.username.title()}**")
+    st.sidebar.markdown(f"**Welcome, {st.session_state.username.title()}**")
     selection = st.sidebar.radio("Go to", ["View Inventory", "Add Item", "Ask the Agent", "Column Manager", "Change Password"])
 
     if st.sidebar.button("Logout"):
@@ -100,18 +100,16 @@ else:
 
     columns = load_columns()
 
-    # One-time fix: migrate old string-based format to dict format
     if columns and isinstance(columns[0], str):
         columns = [{"name": col, "type": "text"} for col in columns]
         save_columns(columns)
 
     df = load_inventory()
 
-    # Ensure all configured columns exist in DataFrame
     for col in columns:
         if col["name"] not in df.columns:
             df[col["name"]] = ""
-    save_inventory(df)  # Ensure updated df is saved
+    save_inventory(df)
 
     # --- View Inventory --
     if selection == "View Inventory":
@@ -123,7 +121,6 @@ else:
             if not df.empty:
                 display_df = df[assigned_column_names + ["ID#"]] if "ID#" in df.columns else df[assigned_column_names]
                 
-                # Add Action column with Delete buttons
                 st.write("Inventory Table:")
                 for i, row in display_df.iterrows():
                     cols = st.columns(len(display_df.columns) + 1)
@@ -136,27 +133,26 @@ else:
                         save_inventory(df)
                         st.success(f"Item '{row.get('ID#', i)}' deleted successfully.")
                         st.rerun()
+                st.dataframe(display_df)
             else:
                 st.warning("Inventory is currently empty")
-            st.dataframe(display_df)
 
     # --- Add Item ---
     elif selection == "Add Item":
         st.title("Add or Edit Inventory Item")
 
-        # Ensure ID# column exists
         if "ID#" not in df.columns:
             df["ID#"] = ""
 
         if len(columns) == 0:
             st.info("No columns to add. Please add columns first.")
         else:
-            mode = st.radio("Mode", ["➕ Add New Item", "✏️ Edit Existing Item"])
+            mode = st.radio("Mode", ["Add New Item", "Edit Existing Item"])
 
             selected_id = None
             existing_data = {}
 
-            if mode == "✏️ Edit Existing Item":
+            if mode == "Edit Existing Item":
                 existing_ids = df["ID#"].dropna().unique().tolist()
                 if existing_ids:
                     selected_id = st.selectbox("Select ID# to Edit", existing_ids)
@@ -168,8 +164,8 @@ else:
             with st.form("item_form"):
                 form_data = {}
 
-                if mode == "➕ Add New Item":
-                    new_id = f"ID{len(df) + 1:04d}"  # e.g., ID0001, ID0002...
+                if mode == "Add New Item":
+                    new_id = f"ID{len(df) + 1:04d}"
                     st.text_input("ID#", value=new_id, disabled=True)
                     form_data["ID#"] = new_id
                 else:
@@ -196,7 +192,7 @@ else:
 
                 submitted = st.form_submit_button("Save Item")
                 if submitted:
-                    if mode == "➕ Add New Item":
+                    if mode == "Add New Item":
                         df = pd.concat([df, pd.DataFrame([form_data])], ignore_index=True)
                         st.success("New item added successfully.")
                     else:
@@ -257,8 +253,6 @@ else:
                 st.error("Incorrect current password")
 
     # --- Column Manager ---
-        # --- Column Manager ---
-        # --- Column Manager ---
     elif selection == "Column Manager":
         st.sidebar.title("Current Columns")
         updated_columns = []
@@ -272,36 +266,32 @@ else:
             col1, col2, col3 = col_container.columns([2, 1, 1])
 
             col1.markdown(f"**{col_name} ({col_type})**")
-            if col2.button("✏️", key=f"edit_col_{idx}"):
+            if col2.button("Edit", key=f"edit_col_{idx}"):
                 edited_column_index = idx
-            if col3.button("🗑️", key=f"delete_col_{idx}"):
+            if col3.button("Delete", key=f"delete_col_{idx}"):
                 df.drop(columns=[col_name], inplace=True, errors='ignore')
                 save_inventory(df)
-                continue  # Skip adding to updated list
+                continue
 
             updated_columns.append(col)
 
         columns = updated_columns
         save_columns(columns)
 
-        # --- Edit Column Section ---
         if edited_column_index is not None:
             st.subheader("Edit Column")
             col_to_edit = columns[edited_column_index]
             new_name = st.text_input("New Column Name", value=col_to_edit["name"])
             new_type = st.selectbox("Column Type", ["text", "number", "date"], index=["text", "number", "date"].index(col_to_edit["type"]))
             if st.button("Update Column"):
-                # Rename column in DataFrame
                 if new_name != col_to_edit["name"]:
                     df.rename(columns={col_to_edit["name"]: new_name}, inplace=True)
-                # Update in columns config
                 columns[edited_column_index] = {"name": new_name, "type": new_type}
                 save_columns(columns)
                 save_inventory(df)
                 st.success("Column updated successfully")
                 st.rerun()
 
-        # --- Add Column Section ---
         st.title("Manage Columns")
         with st.form("column_form"):
             new_col = st.text_input("New Column Name")
