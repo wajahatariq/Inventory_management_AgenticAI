@@ -2,12 +2,17 @@ import streamlit as st
 import pandas as pd
 import os
 import json
+import hashlib
 from datetime import datetime
 
 USER_FILE = "users.csv"
 INVENTORY_FILE = "inventory.csv"
 
 st.set_page_config(page_title="Inventory Manager", layout="wide")
+
+# --- PASSWORD HASHING ---
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
 # Load or initialize user data
 def load_users():
@@ -57,16 +62,16 @@ if not st.session_state.logged_in:
         password = st.text_input("Password", type="password")
         if st.button("Login"):
             users = load_users()
+            hashed = hash_password(password)
             user_match = users[
                 (users["username"].str.strip() == username.strip()) &
-                (users["password"].astype(str).str.strip() == password.strip())
+                (users["password"] == hashed)
             ]
             if not user_match.empty:
                 st.session_state.logged_in = True
                 st.session_state.username = username
                 st.success("Login successful")
                 st.rerun()
-                st.stop()
             else:
                 st.error("Incorrect username or password")
 
@@ -78,7 +83,8 @@ if not st.session_state.logged_in:
             if new_username in users.username.values:
                 st.warning("Username already exists")
             else:
-                users.loc[len(users)] = [new_username, new_password]
+                hashed = hash_password(new_password)
+                users.loc[len(users)] = [new_username, hashed]
                 save_users(users)
                 st.success("Account created! Please log in.")
 
@@ -87,7 +93,7 @@ else:
     st.sidebar.title("Navigation")
     st.sidebar.markdown(f"👤 **Welcome, {st.session_state.username.title()}**")
     selection = st.sidebar.radio("Go to", ["View Inventory", "Add Item", "Ask the Agent", "Column Manager", "Change Password"])
-    
+
     if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
         st.session_state.username = ""
@@ -106,7 +112,7 @@ else:
     for col in columns:
         if col["name"] not in df.columns:
             df[col["name"]] = ""
-            save_inventory(df)
+    save_inventory(df)  # Ensure updated df is saved
 
     # --- View Inventory ---
     if selection == "View Inventory":
@@ -186,9 +192,10 @@ else:
         new_pass = st.text_input("New Password", type="password")
         confirm_pass = st.text_input("Confirm New Password", type="password")
         if st.button("Update Password"):
-            if ((users.username == st.session_state.username) & (users.password == current_pass)).any():
+            hashed_current = hash_password(current_pass)
+            if ((users.username == st.session_state.username) & (users.password == hashed_current)).any():
                 if new_pass == confirm_pass:
-                    users.loc[users.username == st.session_state.username, "password"] = new_pass
+                    users.loc[users.username == st.session_state.username, "password"] = hash_password(new_pass)
                     save_users(users)
                     st.success("Password updated successfully")
                 else:
@@ -213,7 +220,7 @@ else:
                     save_columns(columns)
                     if new_col not in df.columns:
                         df[new_col] = ""
-                        save_inventory(df)
+                    save_inventory(df)
                     st.success("Column added successfully")
                 else:
                     st.warning("Column already exists")
