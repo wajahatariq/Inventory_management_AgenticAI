@@ -114,29 +114,34 @@ else:
     # --- View Inventory ---
     if selection == "View Inventory":
         st.title("Inventory Viewer")
-        if len(columns) == 0:
-            st.info("No columns configured yet.")
+
+    if len(columns) == 0:
+        st.info("No columns configured yet.")
+    else:
+        assigned_column_names = [col["name"] for col in columns]
+        display_columns = ["ID#"] + assigned_column_names
+
+        if not df.empty:
+            # Render column headers
+            header_cols = st.columns(len(display_columns) + 1)  # +1 for 'Action'
+            for i, col_name in enumerate(display_columns):
+                header_cols[i].markdown(f"**{col_name}**")
+            header_cols[-1].markdown("**Action**")
+
+            # Render each row
+            for index, row in df.iterrows():
+                row_cols = st.columns(len(display_columns) + 1)
+                for j, col_name in enumerate(display_columns):
+                    row_cols[j].write(row.get(col_name, ""))
+                if row_cols[-1].button("Delete", key=f"delete_{index}"):
+                    df.drop(index=index, inplace=True)
+                    df.reset_index(drop=True, inplace=True)
+                    save_inventory(df)
+                    st.session_state.inventory_df = df
+                    st.success(f"Item '{row.get('ID#', index)}' deleted successfully.")
+                    st.rerun()
         else:
-            assigned_column_names = [col["name"] for col in columns]
-            display_columns = ["ID#"] + assigned_column_names
-
-            if not df.empty:
-                st.write("Inventory Table:")
-
-                for index, row in df.iterrows():
-                    cols = st.columns(len(display_columns) + 1)  # +1 for Action column
-
-                    for j, col_name in enumerate(display_columns):
-                        cols[j].write(row.get(col_name, ""))
-
-                    if cols[-1].button("Delete", key=f"delete_{index}"):
-                        df.drop(index=index, inplace=True)
-                        df.reset_index(drop=True, inplace=True)
-                        save_inventory(df)
-                        st.success(f"Item '{row.get('ID#', index)}' deleted successfully.")
-                        st.rerun()
-            else:
-                st.warning("Inventory is currently empty")
+            st.warning("Inventory is currently empty")
 
     # --- Add Item ---
     elif selection == "Add Item":
