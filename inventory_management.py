@@ -127,28 +127,67 @@ else:
 
     # --- Add Item ---
     elif selection == "Add Item":
-        st.title("Add Inventory Item")
+        st.title("Add or Edit Inventory Item")
+
+        # Ensure ID# column exists
+        if "ID#" not in df.columns:
+            df["ID#"] = ""
+
         if len(columns) == 0:
             st.info("No columns to add. Please add columns first.")
         else:
-            with st.form("add_item_form"):
-                new_data = {}
+            mode = st.radio("Mode", ["➕ Add New Item", "✏️ Edit Existing Item"])
+
+            selected_id = None
+            existing_data = {}
+
+            if mode == "✏️ Edit Existing Item":
+                existing_ids = df["ID#"].dropna().unique().tolist()
+                if existing_ids:
+                    selected_id = st.selectbox("Select ID# to Edit", existing_ids)
+                    existing_data = df[df["ID#"] == selected_id].iloc[0].to_dict()
+                else:
+                    st.warning("No items to edit. Add an item first.")
+                    st.stop()
+
+            with st.form("item_form"):
+                form_data = {}
+
+                if mode == "➕ Add New Item":
+                    new_id = f"ID{len(df) + 1:04d}"  # e.g., ID0001, ID0002...
+                    st.text_input("ID#", value=new_id, disabled=True)
+                    form_data["ID#"] = new_id
+                else:
+                    st.text_input("ID#", value=selected_id, disabled=True)
+                    form_data["ID#"] = selected_id
+
                 for col in columns:
                     col_name = col["name"]
                     col_type = col["type"]
+                    type_label = col_type.capitalize() if col_type.lower() in ["text", "number", "date"] else "Others"
+
+                    default = existing_data.get(col_name, "") if existing_data else ""
 
                     if col_type == "number":
-                        new_data[col_name] = st.number_input(f"{col_name.capitalize()}")
+                        form_data[col_name] = st.number_input(f"{col_name.capitalize()} ({type_label})", value=float(default) if str(default).replace('.', '', 1).isdigit() else 0.0)
                     elif col_type == "date":
-                        new_data[col_name] = st.date_input(f"{col_name.capitalize()}").strftime("%Y-%m-%d")
+                        try:
+                            default_date = datetime.strptime(default, "%Y-%m-%d").date() if default else datetime.today().date()
+                        except:
+                            default_date = datetime.today().date()
+                        form_data[col_name] = st.date_input(f"{col_name.capitalize()} ({type_label})", value=default_date).strftime("%Y-%m-%d")
                     else:
-                        new_data[col_name] = st.text_input(f"{col_name.capitalize()}")
+                        form_data[col_name] = st.text_input(f"{col_name.capitalize()} ({type_label})", value=default)
 
-                submitted = st.form_submit_button("Add Item")
+                submitted = st.form_submit_button("Save Item")
                 if submitted:
-                    df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+                    if mode == "➕ Add New Item":
+                        df = pd.concat([df, pd.DataFrame([form_data])], ignore_index=True)
+                        st.success("New item added successfully.")
+                    else:
+                        df.loc[df["ID#"] == selected_id] = form_data
+                        st.success("Item updated successfully.")
                     save_inventory(df)
-                    st.success("Item added successfully")
 
     # --- Ask the Agent ---
     elif selection == "Ask the Agent":
