@@ -120,8 +120,23 @@ else:
             st.info("No columns configured yet.")
         else:
             assigned_column_names = [col["name"] for col in columns]
-            visible_df = df[assigned_column_names] if not df.empty else pd.DataFrame(columns=assigned_column_names)
-            if visible_df.empty:
+            if not df.empty:
+                display_df = df[assigned_column_names + ["ID#"]] if "ID#" in df.columns else df[assigned_column_names]
+                
+                # Add Action column with Delete buttons
+                st.write("Inventory Table:")
+                for i, row in display_df.iterrows():
+                    cols = st.columns(len(display_df.columns) + 1)
+                    for j, col_name in enumerate(display_df.columns):
+                        cols[j].write(row[col_name])
+                    delete_button_key = f"delete_{i}"
+                    if cols[-1].button("Delete", key=delete_button_key):
+                        df.drop(index=i, inplace=True)
+                        df.reset_index(drop=True, inplace=True)
+                        save_inventory(df)
+                        st.success(f"Item '{row.get('ID#', i)}' deleted successfully.")
+                        st.rerun()
+            else:
                 st.warning("Inventory is currently empty")
             st.dataframe(visible_df)
 
