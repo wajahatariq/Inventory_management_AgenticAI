@@ -290,6 +290,13 @@ else:
                 st.rerun()
 
         st.title("Manage Columns")
+
+        # ✅ ADDED: Show user-defined column names
+        if columns:
+            st.markdown("### Current Column Names")
+            col_names = [col["name"] for col in columns]
+            st.code("\n".join(col_names))
+
         with st.form("column_form"):
             new_col = st.text_input("New Column Name")
             col_type = st.selectbox("Select Column Type", ["text", "number", "date"])
