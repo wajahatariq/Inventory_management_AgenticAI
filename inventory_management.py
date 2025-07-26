@@ -271,25 +271,46 @@ else:
                         st.success("Item updated successfully.")
                     save_inventory(df)
 
-    elif selection == "Ask the Agent":
-        st.title("Ask Inventory Agent")
-        if df.empty:
+        elif selection == "Ask the Agent":
+        st.title("Ask Inventory Assistant")
+        if df.empty and "rag_df" not in st.session_state:
             st.warning("Your inventory is currently empty. Add some items before asking questions.")
         else:
             query = st.text_input("Ask a question")
             if st.button("Submit") and query:
                 from litellm import completion
 
-                inventory_data = df.fillna("").to_dict(orient="records")
+                inventory_records = df.fillna("").to_dict(orient="records")
+                rag_results = []
+
+                if "rag_df" in st.session_state:
+                    try:
+                        rag_results = st.session_state.rag_tool.search(
+                            collection_name="inventory_rag",
+                            query=query,
+                            limit=3
+                        )
+                    except Exception as e:
+                        st.warning(f"RAG data search error: {e}")
 
                 messages = [
                     {
                         "role": "system",
-                        "content": "You are an intelligent inventory assistant. Use the data below to answer user questions. Be precise and concise. If something is not in the inventory, say so.",
+                        "content": (
+                            "You are an intelligent inventory assistant. Use the provided inventory data below to answer questions. "
+                            "Be precise and concise. If something is not found, politely inform the user."
+                        ),
                     },
-                    {"role": "user", "content": f"Inventory:\n{json.dumps(inventory_data, indent=2)}"},
-                    {"role": "user", "content": f"Question: {query}"},
+                    {"role": "user", "content": f"Inventory Data:\n{json.dumps(inventory_records, indent=2)}"},
                 ]
+
+                if rag_results:
+                    messages.append({
+                        "role": "user",
+                        "content": f"Additional Knowledge:\n{json.dumps(rag_results, indent=2)}"
+                    })
+
+                messages.append({"role": "user", "content": f"Question: {query}"})
 
                 try:
                     response = completion(
@@ -298,10 +319,10 @@ else:
                         api_key=st.secrets["GROQ_API_KEY"],
                     )
                     answer = response.choices[0].message.content
-                    st.success("Agent Response:")
+                    st.success("Assistant Response:")
                     st.write(answer)
                 except Exception as e:
-                    st.error(f"Error from Groq AI: {e}")
+                    st.error(f"AI response error: {e}")
 
     elif selection == "Change Password":
         st.title("Change Password")
