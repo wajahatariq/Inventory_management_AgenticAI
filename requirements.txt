@@ -2,3 +2,4 @@ streamlit
 streamlit-aggrid
 litellm
 sentence-transformers
+qdrant-client
