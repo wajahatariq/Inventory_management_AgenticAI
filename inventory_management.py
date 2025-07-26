@@ -1,19 +1,59 @@
+# Full version of your inventory app with RAG database upload and view
+
 import streamlit as st
 import pandas as pd
 import os
 import json
 import hashlib
 from datetime import datetime
+from sentence_transformers import SentenceTransformer
+from qdrant_client import QdrantClient, models
+from qdrant_client.models import PointStruct
+from typing import List, Dict
 
 USER_FILE = "user.csv"
 INVENTORY_FILE = "inventory.csv"
 st.set_page_config(page_title="Inventory Manager", layout="wide")
 
+# --- RAGTool class ---
+class RAGTool:
+    def __init__(self, model_name="all-MiniLM-L6-v2", db_path=":memory:"):
+        self.encoder = SentenceTransformer(model_name)
+        self.qdrant = QdrantClient(db_path)
+        self.vector_size = self.encoder.get_sentence_embedding_dimension()
+
+    def setup_collection(self, collection_name: str):
+        self.qdrant.recreate_collection(
+            collection_name=collection_name,
+            vectors_config=models.VectorParams(
+                size=self.vector_size,
+                distance=models.Distance.COSINE
+            )
+        )
+
+    def upload_data(self, collection_name: str, data: List[Dict], text_key: str):
+        vectors = [
+            PointStruct(
+                id=idx,
+                vector=self.encoder.encode(doc[text_key]).tolist(),
+                payload=doc,
+            ) for idx, doc in enumerate(data) if text_key in doc
+        ]
+        self.qdrant.upload_points(collection_name=collection_name, points=vectors)
+
+    def search(self, collection_name: str, query: str, limit: int = 3):
+        query_vector = self.encoder.encode(query).tolist()
+        results = self.qdrant.search(
+            collection_name=collection_name,
+            query_vector=query_vector,
+            limit=limit
+        )
+        return [r.payload for r in results]
+
 # --- PASSWORD HASHING ---
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-# Load or initialize user data
 def load_users():
     if os.path.exists(USER_FILE):
         return pd.read_csv(USER_FILE)
@@ -23,7 +63,6 @@ def load_users():
 def save_users(users_df):
     users_df.to_csv(USER_FILE, index=False)
 
-# Load or initialize inventory data
 def load_inventory():
     if os.path.exists(INVENTORY_FILE):
         return pd.read_csv(INVENTORY_FILE)
@@ -33,7 +72,6 @@ def load_inventory():
 def save_inventory(df):
     df.to_csv(INVENTORY_FILE, index=False)
 
-# Column config: [{"name": "item", "type": "text"}, ...]
 def save_columns(columns):
     with open("columns.json", "w") as f:
         json.dump(columns, f)
@@ -47,15 +85,15 @@ def load_columns():
 # --- SESSION INIT ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
-
 if "username" not in st.session_state:
     st.session_state.username = ""
+if "rag_tool" not in st.session_state:
+    st.session_state.rag_tool = RAGTool()
 
-# --- LOGIN ---
+# --- LOGIN SYSTEM ---
 if not st.session_state.logged_in:
     st.title("Login")
     login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
-
     with login_tab:
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
@@ -86,6 +124,42 @@ if not st.session_state.logged_in:
                 users.loc[len(users)] = [new_username, hashed]
                 save_users(users)
                 st.success("Account created! Please log in.")
+
+# --- LOGGED IN VIEW ---
+else:
+    st.sidebar.title("Navigation")
+    st.sidebar.markdown(f"**Welcome, {st.session_state.username.title()}**")
+    selection = st.sidebar.radio("Go to", ["View Inventory", "Add Item", "Ask the Agent", "Column Manager", "Change Password"])
+
+    with st.sidebar:
+        rag_option = st.radio("RAG Tools", ["None", "Upload RAG Database"])
+
+        if rag_option == "Upload RAG Database":
+            uploaded_file = st.file_uploader("Upload CSV for RAG", type="csv")
+            if uploaded_file is not None:
+                try:
+                    rag_df = pd.read_csv(uploaded_file)
+                    if 'description' not in rag_df.columns:
+                        st.warning("CSV must contain a 'description' column.")
+                    else:
+                        st.session_state.rag_df = rag_df
+                        st.session_state.rag_tool.setup_collection("inventory_rag")
+                        st.session_state.rag_tool.upload_data(
+                            collection_name="inventory_rag",
+                            data=rag_df.to_dict("records"),
+                            text_key="description"
+                        )
+                        st.success("RAG database uploaded and embedded.")
+                except Exception as e:
+                    st.error(f"Upload failed: {e}")
+
+    if st.session_state.get("rag_df") is not None:
+        st.write("### RAG Inventory View")
+        st.dataframe(st.session_state.rag_df)
+
+    # [The rest of your inventory system remains untouched from this point onward]
+    # You can paste the remaining sections (View Inventory, Add Item, Ask Agent, etc.)
+    # exactly as-is below this line to finish full integration.
 
 # --- LOGGED IN VIEW ---
 else:
