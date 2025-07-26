@@ -1,5 +1,3 @@
-# Full version of your inventory app with RAG database upload and view
-
 import streamlit as st
 import pandas as pd
 import os
@@ -15,8 +13,8 @@ USER_FILE = "user.csv"
 INVENTORY_FILE = "inventory.csv"
 st.set_page_config(page_title="Inventory Manager", layout="wide")
 
-# --- RAGTool class ---
-class RAGTool:
+# --- KnowledgeTool class ---
+class KnowledgeTool:
     def __init__(self, model_name="all-MiniLM-L6-v2", db_path=":memory:"):
         self.encoder = SentenceTransformer(model_name)
         self.qdrant = QdrantClient(db_path)
@@ -88,7 +86,7 @@ if "logged_in" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state.username = ""
 if "rag_tool" not in st.session_state:
-    st.session_state.rag_tool = RAGTool()
+    st.session_state.rag_tool = KnowledgeTool()
 
 # --- LOGIN SYSTEM ---
 if not st.session_state.logged_in:
@@ -132,10 +130,10 @@ else:
     selection = st.sidebar.radio("Go to", ["View Inventory", "Add Item", "Ask the Agent", "Column Manager", "Change Password"])
 
     with st.sidebar:
-        rag_option = st.radio("RAG Tools", ["None", "Upload RAG Database"])
+        db_option = st.radio("Database Tools", ["None", "Upload Inventory Knowledge"])
 
-        if rag_option == "Upload RAG Database":
-            uploaded_file = st.file_uploader("Upload CSV for RAG", type="csv")
+        if db_option == "Upload Inventory Knowledge":
+            uploaded_file = st.file_uploader("Upload CSV", type="csv")
             if uploaded_file is not None:
                 try:
                     rag_df = pd.read_csv(uploaded_file)
@@ -143,155 +141,73 @@ else:
                         st.warning("CSV must contain a 'description' column.")
                     else:
                         st.session_state.rag_df = rag_df
-                        st.session_state.rag_tool.setup_collection("inventory_rag")
+                        st.session_state.rag_tool.setup_collection("inventory_knowledge")
                         st.session_state.rag_tool.upload_data(
-                            collection_name="inventory_rag",
+                            collection_name="inventory_knowledge",
                             data=rag_df.to_dict("records"),
                             text_key="description"
                         )
-                        st.success("RAG database uploaded and embedded.")
+                        st.success("Knowledge base updated.")
                 except Exception as e:
                     st.error(f"Upload failed: {e}")
 
     if st.session_state.get("rag_df") is not None:
-        st.write("### RAG Inventory View")
+        st.write("### Inventory Knowledge View")
         st.dataframe(st.session_state.rag_df)
 
-    # [The rest of your inventory system remains untouched from this point onward]
-    # You can paste the remaining sections (View Inventory, Add Item, Ask Agent, etc.)
-    # exactly as-is below this line to finish full integration.
-
-# --- LOGGED IN VIEW ---
-else:
-    st.sidebar.title("Navigation")
-    st.sidebar.markdown(f"**Welcome, {st.session_state.username.title()}**")
-    selection = st.sidebar.radio("Go to", ["View Inventory", "Add Item", "Ask the Agent", "Column Manager", "Change Password"])
-
-    if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.session_state.username = ""
-        st.rerun()
-
-    columns = load_columns()
-    if columns and isinstance(columns[0], str):
-        columns = [{"name": col, "type": "text"} for col in columns]
-        save_columns(columns)
-
-    df = load_inventory()
-    for col in columns:
-        if col["name"] not in df.columns:
-            df[col["name"]] = ""
-    if "ID#" not in df.columns:
-        df["ID#"] = [f"ID{idx+1:04d}" for idx in range(len(df))]
-    save_inventory(df)
-
-    if selection == "View Inventory":
-        st.title("Inventory Viewer")
-        if len(columns) == 0:
-            st.info("No columns configured yet.")
-        else:
-            assigned_column_names = [col["name"] for col in columns]
-            display_columns = ["ID#"] + assigned_column_names
-
-            if not df.empty:
-                st.markdown("### Inventory Table")
-                header_cols = st.columns(len(display_columns) + 1)
-                for i, col_name in enumerate(display_columns):
-                    header_cols[i].markdown(f"**{col_name}**")
-                header_cols[-1].markdown("**Action**")
-
-                for index, row in df.iterrows():
-                    cols = st.columns(len(display_columns) + 1)
-                    for j, col_name in enumerate(display_columns):
-                        cols[j].write(row.get(col_name, ""))
-                    if cols[-1].button("Delete", key=f"delete_{index}"):
-                        df.drop(index=index, inplace=True)
-                        df.reset_index(drop=True, inplace=True)
-                        save_inventory(df)
-                        st.success(f"Item '{row.get('ID#', index)}' deleted successfully.")
-                        st.rerun()
-            else:
-                st.warning("Inventory is currently empty")
-
-    elif selection == "Add Item":
-        st.title("Add or Edit Inventory Item")
-
-        if len(columns) == 0:
-            st.info("No columns to add. Please add columns first.")
-        else:
-            mode = st.radio("Mode", ["Add New Item", "Edit Existing Item"])
-            selected_id = None
-            existing_data = {}
-
-            if mode == "Edit Existing Item":
-                existing_ids = df["ID#"].dropna().unique().tolist()
-                if existing_ids:
-                    selected_id = st.selectbox("Select ID# to Edit", existing_ids)
-                    existing_data = df[df["ID#"] == selected_id].iloc[0].to_dict()
-                else:
-                    st.warning("No items to edit. Add an item first.")
-                    st.stop()
-
-            with st.form("item_form"):
-                form_data = {}
-
-                if mode == "Add New Item":
-                    new_id = f"ID{len(df) + 1:04d}"
-                    st.text_input("ID#", value=new_id, disabled=True)
-                    form_data["ID#"] = new_id
-                else:
-                    st.text_input("ID#", value=selected_id, disabled=True)
-                    form_data["ID#"] = selected_id
-
-                for col in columns:
-                    col_name = col["name"]
-                    col_type = col["type"]
-                    default = existing_data.get(col_name, "") if existing_data else ""
-
-                    if col_type == "number":
-                        form_data[col_name] = st.number_input(col_name, value=float(default) if str(default).replace('.', '', 1).isdigit() else 0.0)
-                    elif col_type == "date":
-                        try:
-                            default_date = datetime.strptime(default, "%Y-%m-%d").date() if default else datetime.today().date()
-                        except:
-                            default_date = datetime.today().date()
-                        form_data[col_name] = st.date_input(col_name, value=default_date).strftime("%Y-%m-%d")
-                    else:
-                        form_data[col_name] = st.text_input(col_name, value=default)
-
-                submitted = st.form_submit_button("Save Item")
-                if submitted:
-                    if mode == "Add New Item":
-                        df = pd.concat([df, pd.DataFrame([form_data])], ignore_index=True)
-                        st.success("New item added successfully.")
-                    else:
-                        for key in form_data:
-                            df.loc[df["ID#"] == selected_id, key] = form_data[key]
-
-                        st.success("Item updated successfully.")
-                    save_inventory(df)
-
-        elif selection == "Ask the Agent":
+    if selection == "Ask the Agent":
         st.title("Ask Inventory Assistant")
+        df = load_inventory()
         if df.empty and "rag_df" not in st.session_state:
             st.warning("Your inventory is currently empty. Add some items before asking questions.")
         else:
             query = st.text_input("Ask a question")
             if st.button("Submit") and query:
                 from litellm import completion
-
                 inventory_records = df.fillna("").to_dict(orient="records")
                 rag_results = []
 
                 if "rag_df" in st.session_state:
                     try:
                         rag_results = st.session_state.rag_tool.search(
-                            collection_name="inventory_rag",
+                            collection_name="inventory_knowledge",
                             query=query,
                             limit=3
                         )
                     except Exception as e:
-                        st.warning(f"RAG data search error: {e}")
+                        st.warning(f"Knowledge search error: {e}")
+
+                messages = [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are an intelligent inventory assistant. Use the provided inventory data below to answer questions. "
+                            "Be precise and concise. If something is not found, politely inform the user."
+                        ),
+                    },
+                    {"role": "user", "content": f"Inventory Data:\n{json.dumps(inventory_records, indent=2)}"},
+                ]
+
+                if rag_results:
+                    messages.append({
+                        "role": "user",
+                        "content": f"Additional Knowledge:\n{json.dumps(rag_results, indent=2)}"
+                    })
+
+                messages.append({"role": "user", "content": f"Question: {query}"})
+
+                try:
+                    response = completion(
+                        model="groq/llama3-8b-8192",
+                        messages=messages,
+                        api_key=st.secrets["GROQ_API_KEY"],
+                    )
+                    answer = response.choices[0].message.content
+                    st.success("Assistant Response:")
+                    st.write(answer)
+                except Exception as e:
+                    st.error(f"AI response error: {e}")
+
 
                 messages = [
                     {
