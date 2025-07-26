@@ -1,315 +1,141 @@
 import streamlit as st
 import pandas as pd
 import os
-import json
 import hashlib
 from datetime import datetime
-from sentence_transformers import SentenceTransformer
-from qdrant_client import QdrantClient, models
-from qdrant_client.models import PointStruct
-from typing import List, Dict
+from litellm import completion
 
+# === File Constants ===
 USER_FILE = "user.csv"
 INVENTORY_FILE = "inventory.csv"
+
+# === App Setup ===
 st.set_page_config(page_title="Inventory Manager", layout="wide")
 
-# --- KnowledgeTool class ---
-class KnowledgeTool:
-    def __init__(self, model_name="all-MiniLM-L6-v2", db_path=":memory:"):
-        self.encoder = SentenceTransformer(model_name)
-        self.qdrant = QdrantClient(db_path)
-        self.vector_size = self.encoder.get_sentence_embedding_dimension()
-
-    def setup_collection(self, collection_name: str):
-        self.qdrant.recreate_collection(
-            collection_name=collection_name,
-            vectors_config=models.VectorParams(
-                size=self.vector_size,
-                distance=models.Distance.COSINE
-            )
-        )
-
-    def upload_data(self, collection_name: str, data: List[Dict], text_key: str):
-        vectors = [
-            PointStruct(
-                id=idx,
-                vector=self.encoder.encode(doc[text_key]).tolist(),
-                payload=doc,
-            ) for idx, doc in enumerate(data) if text_key in doc
-        ]
-        self.qdrant.upload_points(collection_name=collection_name, points=vectors)
-
-    def search(self, collection_name: str, query: str, limit: int = 3):
-        query_vector = self.encoder.encode(query).tolist()
-        results = self.qdrant.search(
-            collection_name=collection_name,
-            query_vector=query_vector,
-            limit=limit
-        )
-        return [r.payload for r in results]
-
-# --- PASSWORD HASHING ---
+# === Utility Functions ===
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def load_users():
     if os.path.exists(USER_FILE):
         return pd.read_csv(USER_FILE)
-    else:
-        return pd.DataFrame(columns=["username", "password"])
+    return pd.DataFrame(columns=["username", "password"])
 
-def save_users(users_df):
-    users_df.to_csv(USER_FILE, index=False)
+def save_user(username, password):
+    users = load_users()
+    users = users.append({"username": username, "password": hash_password(password)}, ignore_index=True)
+    users.to_csv(USER_FILE, index=False)
+
+def verify_user(username, password):
+    users = load_users()
+    hashed = hash_password(password)
+    return not users[(users["username"] == username) & (users["password"] == hashed)].empty
 
 def load_inventory():
     if os.path.exists(INVENTORY_FILE):
         return pd.read_csv(INVENTORY_FILE)
-    else:
-        return pd.DataFrame()
+    return pd.DataFrame(columns=["item_name", "category", "quantity", "price", "date_added"])
 
 def save_inventory(df):
     df.to_csv(INVENTORY_FILE, index=False)
 
-def save_columns(columns):
-    with open("columns.json", "w") as f:
-        json.dump(columns, f)
+def ask_inventory_agent(prompt):
+    try:
+        response = completion(
+            model="groq/llama3-8b-8192",
+            messages=[{"role": "user", "content": prompt}],
+            api_key=os.getenv("LITELLM_API_KEY")  # or use st.secrets if set in UI
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
 
-def load_columns():
-    if os.path.exists("columns.json"):
-        with open("columns.json", "r") as f:
-            return json.load(f)
-    return []
+# === Login/Signup ===
+auth_mode = st.sidebar.selectbox("Login/Signup", ["Login", "Signup"])
+username = st.sidebar.text_input("Username")
+password = st.sidebar.text_input("Password", type="password")
 
-# --- SESSION INIT ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "username" not in st.session_state:
-    st.session_state.username = ""
-if "rag_tool" not in st.session_state:
-    st.session_state.rag_tool = KnowledgeTool()
+if auth_mode == "Signup":
+    if st.sidebar.button("Create Account"):
+        save_user(username, password)
+        st.sidebar.success("Account created. Please log in.")
+    st.stop()
 
-# --- LOGIN SYSTEM ---
-if not st.session_state.logged_in:
-    st.title("Login")
-    login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
-    with login_tab:
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        if st.button("Login"):
-            users = load_users()
-            hashed = hash_password(password)
-            user_match = users[
-                (users["username"].str.strip() == username.strip()) &
-                (users["password"] == hashed)
-            ]
-            if not user_match.empty:
-                st.session_state.logged_in = True
-                st.session_state.username = username
-                st.success("Login successful")
-                st.rerun()
-            else:
-                st.error("Incorrect username or password")
+if not verify_user(username, password):
+    st.sidebar.warning("Please log in to access the app.")
+    st.stop()
 
-    with signup_tab:
-        new_username = st.text_input("New Username")
-        new_password = st.text_input("New Password", type="password")
-        if st.button("Sign Up"):
-            users = load_users()
-            if new_username in users.username.values:
-                st.warning("Username already exists")
-            else:
-                hashed = hash_password(new_password)
-                users.loc[len(users)] = [new_username, hashed]
-                save_users(users)
-                st.success("Account created! Please log in.")
+# === Logged-in Interface ===
+st.title("📦 Inventory Management Dashboard")
 
-# --- LOGGED IN VIEW ---
-else:
-    st.sidebar.title("Navigation")
-    st.sidebar.markdown(f"**Welcome, {st.session_state.username.title()}**")
-    selection = st.sidebar.radio("Go to", ["View Inventory", "Add Item", "Ask the Agent", "Column Manager", "Change Password"])
+# --- Load Inventory ---
+df = load_inventory()
 
-    with st.sidebar:
-        db_option = st.radio("Database Tools", ["None", "Upload Inventory Knowledge"])
+# === Tabs ===
+tab1, tab2, tab3, tab4 = st.tabs(["📋 View Inventory", "➕ Add Item", "🧠 Ask Inventory Agent", "⚙️ Settings"])
 
-        if db_option == "Upload Inventory Knowledge":
-            uploaded_file = st.file_uploader("Upload CSV", type="csv")
-            if uploaded_file is not None:
-                try:
-                    rag_df = pd.read_csv(uploaded_file)
-                    if 'description' not in rag_df.columns:
-                        st.warning("CSV must contain a 'description' column.")
-                    else:
-                        st.session_state.rag_df = rag_df
-                        st.session_state.rag_tool.setup_collection("inventory_knowledge")
-                        st.session_state.rag_tool.upload_data(
-                            collection_name="inventory_knowledge",
-                            data=rag_df.to_dict("records"),
-                            text_key="description"
-                        )
-                        st.success("Knowledge base updated.")
-                except Exception as e:
-                    st.error(f"Upload failed: {e}")
+# === View Inventory ===
+with tab1:
+    st.subheader("Current Inventory")
+    st.dataframe(df, use_container_width=True)
 
-    if st.session_state.get("rag_df") is not None:
-        st.write("### Inventory Knowledge View")
-        st.dataframe(st.session_state.rag_df)
+# === Add Item ===
+with tab2:
+    st.subheader("Add New Item")
+    item_name = st.text_input("Item Name")
+    category = st.text_input("Category")
+    quantity = st.number_input("Quantity", min_value=0, step=1)
+    price = st.number_input("Price", min_value=0.0, step=0.1)
 
-    if selection == "Ask the Agent":
-        st.title("Ask Inventory Assistant")
-        df = load_inventory()
-        if df.empty and "rag_df" not in st.session_state:
-            st.warning("Your inventory is currently empty. Add some items before asking questions.")
-        else:
-            query = st.text_input("Ask a question")
-            if st.button("Submit") and query:
-                from litellm import completion
-                inventory_records = df.fillna("").to_dict(orient="records")
-                rag_results = []
+    if st.button("Add Item"):
+        new_row = {
+            "item_name": item_name,
+            "category": category,
+            "quantity": quantity,
+            "price": price,
+            "date_added": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        df = df.append(new_row, ignore_index=True)
+        save_inventory(df)
+        st.success("Item added successfully!")
 
-                if "rag_df" in st.session_state:
-                    try:
-                        rag_results = st.session_state.rag_tool.search(
-                            collection_name="inventory_knowledge",
-                            query=query,
-                            limit=3
-                        )
-                    except Exception as e:
-                        st.warning(f"Knowledge search error: {e}")
+# === Ask Inventory Agent ===
+with tab3:
+    st.subheader("Ask Inventory Agent")
+    user_query = st.text_area("Enter your question (e.g., 'Which category has the most items?')")
 
-                messages = [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are an intelligent inventory assistant. Use the provided inventory data below to answer questions. "
-                            "Be precise and concise. If something is not found, politely inform the user."
-                        ),
-                    },
-                    {"role": "user", "content": f"Inventory Data:\n{json.dumps(inventory_records, indent=2)}"},
-                ]
+    if st.button("Ask"):
+        inventory_text = df.to_string(index=False)
+        final_prompt = f"""
+You are an Inventory Agent. Answer the question based on this inventory data below:
 
-                if rag_results:
-                    messages.append({
-                        "role": "user",
-                        "content": f"Additional Knowledge:\n{json.dumps(rag_results, indent=2)}"
-                    })
+{inventory_text}
 
-                messages.append({"role": "user", "content": f"Question: {query}"})
+Question: {user_query}
+"""
+        result = ask_inventory_agent(final_prompt)
+        st.markdown("#### 🤖 Agent Response:")
+        st.info(result)
 
-                try:
-                    response = completion(
-                        model="groq/llama3-8b-8192",
-                        messages=messages,
-                        api_key=st.secrets["GROQ_API_KEY"],
-                    )
-                    answer = response.choices[0].message.content
-                    st.success("Assistant Response:")
-                    st.write(answer)
-                except Exception as e:
-                    st.error(f"AI response error: {e}")
+# === Settings (Dynamic Column Support) ===
+with tab4:
+    st.subheader("Modify Inventory Structure")
 
-
-                messages = [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are an intelligent inventory assistant. Use the provided inventory data below to answer questions. "
-                            "Be precise and concise. If something is not found, politely inform the user."
-                        ),
-                    },
-                    {"role": "user", "content": f"Inventory Data:\n{json.dumps(inventory_records, indent=2)}"},
-                ]
-
-                if rag_results:
-                    messages.append({
-                        "role": "user",
-                        "content": f"Additional Knowledge:\n{json.dumps(rag_results, indent=2)}"
-                    })
-
-                messages.append({"role": "user", "content": f"Question: {query}"})
-
-                try:
-                    response = completion(
-                        model="groq/llama3-8b-8192",
-                        messages=messages,
-                        api_key=st.secrets["GROQ_API_KEY"],
-                    )
-                    answer = response.choices[0].message.content
-                    st.success("Assistant Response:")
-                    st.write(answer)
-                except Exception as e:
-                    st.error(f"AI response error: {e}")
-
-    elif selection == "Change Password":
-        st.title("Change Password")
-        users = load_users()
-        current_pass = st.text_input("Current Password", type="password")
-        new_pass = st.text_input("New Password", type="password")
-        confirm_pass = st.text_input("Confirm New Password", type="password")
-        if st.button("Update Password"):
-            hashed_current = hash_password(current_pass)
-            if ((users.username == st.session_state.username) & (users.password == hashed_current)).any():
-                if new_pass == confirm_pass:
-                    users.loc[users.username == st.session_state.username, "password"] = hash_password(new_pass)
-                    save_users(users)
-                    st.success("Password updated successfully")
-                else:
-                    st.error("Passwords do not match")
-            else:
-                st.error("Incorrect current password")
-
-    elif selection == "Column Manager":
-        st.sidebar.title("Current Columns")
-        updated_columns = []
-        edited_column_index = None
-
-        for idx, col in enumerate(columns):
-            col_name = col['name']
-            col_type = col['type']
-
-            col_container = st.sidebar.container()
-            col1, col2, col3 = col_container.columns([2, 1, 1])
-
-            col1.markdown(f"**{col_name} ({col_type})**")
-            if col2.button("✏️", key=f"edit_col_{idx}"):
-                edited_column_index = idx
-            if col3.button("🗑️", key=f"delete_col_{idx}"):
-                df.drop(columns=[col_name], inplace=True, errors='ignore')
+    if st.checkbox("Add New Column"):
+        new_col = st.text_input("New Column Name")
+        default_val = st.text_input("Default Value", "")
+        if st.button("Add Column"):
+            if new_col not in df.columns:
+                df[new_col] = default_val
                 save_inventory(df)
-                continue
+                st.success(f"Column '{new_col}' added.")
+            else:
+                st.warning("Column already exists.")
 
-            updated_columns.append(col)
+    if st.checkbox("Delete a Column"):
+        col_to_delete = st.selectbox("Select Column", df.columns)
+        if st.button("Delete Column"):
+            df = df.drop(columns=[col_to_delete])
+            save_inventory(df)
+            st.success(f"Deleted column '{col_to_delete}'")
 
-        columns = updated_columns
-        save_columns(columns)
-
-        if edited_column_index is not None:
-            st.subheader("Edit Column")
-            col_to_edit = columns[edited_column_index]
-            new_name = st.text_input("New Column Name", value=col_to_edit["name"])
-            new_type = st.selectbox("Column Type", ["text", "number", "date"], index=["text", "number", "date"].index(col_to_edit["type"]))
-            if st.button("Update Column"):
-                if new_name != col_to_edit["name"]:
-                    df.rename(columns={col_to_edit["name"]: new_name}, inplace=True)
-                columns[edited_column_index] = {"name": new_name, "type": new_type}
-                save_columns(columns)
-                save_inventory(df)
-                st.success("Column updated successfully")
-                st.rerun()
-
-        st.title("Manage Columns")
-        with st.form("column_form"):
-            new_col = st.text_input("New Column Name")
-            col_type = st.selectbox("Select Column Type", ["text", "number", "date"])
-            submitted = st.form_submit_button("Add Column")
-            if submitted and new_col:
-                if not any(c["name"].lower() == new_col.lower() for c in columns):
-                    columns.append({"name": new_col, "type": col_type})
-                    save_columns(columns)
-                    if new_col not in df.columns:
-                        df[new_col] = ""
-                    save_inventory(df)
-                    st.success("Column added successfully")
-                    st.rerun()
-                else:
-                    st.warning("Column already exists")
