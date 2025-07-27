@@ -43,10 +43,11 @@ def save_categories(data):
         json.dump(data, f)
 
 def load_inventory():
-    if os.path.exists(INVENTORY_FILE):
-        return pd.read_csv(INVENTORY_FILE)
-    else:
-        return pd.DataFrame()
+    df = pd.read_csv(INVENTORY_FILE) if os.path.exists(INVENTORY_FILE) else pd.DataFrame()
+    categories = load_categories()
+    valid_columns = ["ID#"] + list(categories.keys())
+    df = df[[col for col in df.columns if col in valid_columns or col == "ID#"]]
+    return df
 
 def save_inventory(df):
     df.to_csv(INVENTORY_FILE, index=False)
@@ -105,7 +106,7 @@ def change_password():
         else:
             st.error("Current password incorrect")
 
-# --- Add Column (was Category) ---
+# --- Add Column ---
 def add_column():
     st.subheader("Add Column")
     categories = load_categories()
@@ -120,7 +121,7 @@ def add_column():
             save_categories(categories)
             st.success(f"Column '{col_name}' added successfully")
 
-# --- Edit Column (Rename/Delete) ---
+# --- Edit Column ---
 def edit_column():
     st.subheader("Edit Existing Columns")
     categories = load_categories()
@@ -173,7 +174,7 @@ def view_inventory():
         st.info("No items found")
         return
 
-    if st.button("📥 Export as CSV"):
+    if st.button("Export as CSV"):
         csv = df.to_csv(index=False).encode('utf-8')
         st.download_button("Download CSV", data=csv, file_name="inventory.csv", mime="text/csv")
 
@@ -217,7 +218,7 @@ def update_column():
         else:
             st.warning("ID# not found")
 
-# --- Ask Inventory Agent with Groq (via LiteLLM) ---
+# --- Ask Inventory Agent with Groq (LiteLLM) ---
 def ask_inventory_agent():
     import litellm
     st.subheader("Ask Inventory Agent")
@@ -237,17 +238,43 @@ def ask_inventory_agent():
         except Exception as e:
             st.error(f"Error: {e}")
 
+# --- Clean Inventory Columns ---
+def clean_inventory_columns():
+    st.subheader("Clean Inventory Columns")
+    df = load_inventory()
+    categories = load_categories()
+    allowed_columns = ["ID#"] + list(categories.keys())
+    all_columns = df.columns.tolist()
+    invalid_columns = [col for col in all_columns if col not in allowed_columns]
+
+    if not invalid_columns:
+        st.success("No extra columns found. Your inventory is clean.")
+        return
+
+    st.warning("The following columns are not in your defined structure:")
+    selected_to_remove = st.multiselect("Select columns to remove", invalid_columns)
+
+    if selected_to_remove:
+        if st.button("Remove Selected Columns"):
+            df.drop(columns=selected_to_remove, inplace=True)
+            save_inventory(df)
+            st.success("Selected columns removed successfully.")
+            st.rerun()
+
 # --- Main App ---
 if not st.session_state.logged_in:
     login_signup()
 else:
-    st.sidebar.markdown(f"**👤 {st.session_state.username}**")
-    if st.sidebar.button("🚪 Logout"):
+    st.sidebar.markdown(f"Logged in as: **{st.session_state.username}**")
+    if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
         st.session_state.username = ""
         st.rerun()
 
-    page = st.sidebar.radio("Navigation", ["Add Inventory", "Add Column", "Edit Columns", "View Inventory", "Edit Inventory", "Ask Agent", "Change Password"])
+    page = st.sidebar.radio("Navigation", [
+        "Add Inventory", "Add Column", "Edit Columns", "View Inventory",
+        "Edit Inventory", "Ask Agent", "Change Password", "Clean Inventory Columns"
+    ])
 
     if page == "Add Inventory":
         add_inventory()
@@ -263,3 +290,5 @@ else:
         ask_inventory_agent()
     elif page == "Change Password":
         change_password()
+    elif page == "Clean Inventory Columns":
+        clean_inventory_columns()
