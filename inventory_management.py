@@ -4,7 +4,6 @@ import os
 import json
 import hashlib
 from datetime import datetime
-from typing import List
 
 # --- File Paths ---
 USER_FILE = "user.csv"
@@ -18,8 +17,6 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
     st.session_state.username = ""
-if "page" not in st.session_state:
-    st.session_state.page = "Add Inventory"
 
 # --- Utility Functions ---
 def hash_password(password: str) -> str:
@@ -244,36 +241,32 @@ def ask_inventory_agent():
 if not st.session_state.logged_in:
     login_signup()
 else:
-    st.markdown(f"Logged in as: **{st.session_state.username}**")
+    # Top Info
+    st.markdown(f"### Logged in as: **{st.session_state.username}**")
 
-    nav_options = [
+    # Sidebar Navigation
+    st.sidebar.markdown(f"Logged in as: **{st.session_state.username}**")
+    if st.sidebar.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+        st.rerun()
+
+    page = st.sidebar.radio("Navigation", [
         "Add Inventory", "Add Column", "Edit Columns", "View Inventory",
-        "Edit Inventory", "Ask Agent", "Change Password", "Logout"
-    ]
+        "Edit Inventory", "Ask Agent", "Change Password"
+    ])
 
-    selected = st.session_state.get("page", nav_options[0])
-    cols = st.columns(len(nav_options))
-
-    for i, option in enumerate(nav_options):
-        if cols[i].button(option):
-            st.session_state.page = option
-            selected = option
-            if option == "Logout":
-                st.session_state.logged_in = False
-                st.session_state.username = ""
-                st.rerun()
-
-    if selected == "Add Inventory":
+    if page == "Add Inventory":
         add_inventory()
-    elif selected == "Add Column":
+    elif page == "Add Column":
         add_column()
-    elif selected == "Edit Columns":
+    elif page == "Edit Columns":
         edit_column()
-    elif selected == "View Inventory":
+    elif page == "View Inventory":
         view_inventory()
-    elif selected == "Edit Inventory":
+    elif page == "Edit Inventory":
         update_column()
-    elif selected == "Ask Agent":
+    elif page == "Ask Agent":
         ask_inventory_agent()
-    elif selected == "Change Password":
+    elif page == "Change Password":
         change_password()
