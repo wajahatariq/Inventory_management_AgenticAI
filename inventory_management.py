@@ -241,9 +241,6 @@ def ask_inventory_agent():
 if not st.session_state.logged_in:
     login_signup()
 else:
-    # Top Info
-    st.markdown(f"### Logged in as: **{st.session_state.username}**")
-
     # Sidebar Navigation
     st.sidebar.markdown(f"Logged in as: **{st.session_state.username}**")
     if st.sidebar.button("Logout"):
