@@ -18,6 +18,8 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
     st.session_state.username = ""
+if "page" not in st.session_state:
+    st.session_state.page = "Add Inventory"
 
 # --- Utility Functions ---
 def hash_password(password: str) -> str:
@@ -102,7 +104,7 @@ def change_password():
         if hash_password(current_pass) == user_row.iloc[0]["password"]:
             users.loc[users["username"] == st.session_state.username, "password"] = hash_password(new_pass)
             save_users(users)
-            st.success("Password updated successfully!")
+            st.success("Password updated successfully")
         else:
             st.error("Current password incorrect")
 
@@ -238,57 +240,40 @@ def ask_inventory_agent():
         except Exception as e:
             st.error(f"Error: {e}")
 
-# --- Clean Inventory Columns ---
-def clean_inventory_columns():
-    st.subheader("Clean Inventory Columns")
-    df = load_inventory()
-    categories = load_categories()
-    allowed_columns = ["ID#"] + list(categories.keys())
-    all_columns = df.columns.tolist()
-    invalid_columns = [col for col in all_columns if col not in allowed_columns]
-
-    if not invalid_columns:
-        st.success("No extra columns found. Your inventory is clean.")
-        return
-
-    st.warning("The following columns are not in your defined structure:")
-    selected_to_remove = st.multiselect("Select columns to remove", invalid_columns)
-
-    if selected_to_remove:
-        if st.button("Remove Selected Columns"):
-            df.drop(columns=selected_to_remove, inplace=True)
-            save_inventory(df)
-            st.success("Selected columns removed successfully.")
-            st.rerun()
-
 # --- Main App ---
 if not st.session_state.logged_in:
     login_signup()
 else:
-    st.sidebar.markdown(f"Logged in as: **{st.session_state.username}**")
-    if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.session_state.username = ""
-        st.rerun()
+    st.markdown(f"Logged in as: **{st.session_state.username}**")
 
-    page = st.sidebar.radio("Navigation", [
+    nav_options = [
         "Add Inventory", "Add Column", "Edit Columns", "View Inventory",
-        "Edit Inventory", "Ask Agent", "Change Password", "Clean Inventory Columns"
-    ])
+        "Edit Inventory", "Ask Agent", "Change Password", "Logout"
+    ]
 
-    if page == "Add Inventory":
+    selected = st.session_state.get("page", nav_options[0])
+    cols = st.columns(len(nav_options))
+
+    for i, option in enumerate(nav_options):
+        if cols[i].button(option):
+            st.session_state.page = option
+            selected = option
+            if option == "Logout":
+                st.session_state.logged_in = False
+                st.session_state.username = ""
+                st.rerun()
+
+    if selected == "Add Inventory":
         add_inventory()
-    elif page == "Add Column":
+    elif selected == "Add Column":
         add_column()
-    elif page == "Edit Columns":
+    elif selected == "Edit Columns":
         edit_column()
-    elif page == "View Inventory":
+    elif selected == "View Inventory":
         view_inventory()
-    elif page == "Edit Inventory":
+    elif selected == "Edit Inventory":
         update_column()
-    elif page == "Ask Agent":
+    elif selected == "Ask Agent":
         ask_inventory_agent()
-    elif page == "Change Password":
+    elif selected == "Change Password":
         change_password()
-    elif page == "Clean Inventory Columns":
-        clean_inventory_columns()
