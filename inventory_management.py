@@ -113,18 +113,30 @@ def add_column():
     col_type = st.selectbox("Column Type", ["text", "number", "date"])
 
     if st.button("Save Column"):
-        categories[col_name] = col_type
-        save_categories(categories)
-        st.success(f"Column '{col_name}' added successfully")
+        if col_name in categories or col_name in ["ID#", "Action"]:
+            st.warning("Column name is reserved or already exists.")
+        else:
+            categories[col_name] = col_type
+            save_categories(categories)
+            st.success(f"Column '{col_name}' added successfully")
 
-    st.subheader("Update/Delete Column")
+# --- Edit Column (Rename/Delete) ---
+def edit_column():
+    st.subheader("Edit Existing Columns")
+    categories = load_categories()
     if categories:
-        selected_col = st.selectbox("Select Column", list(categories.keys()))
+        selected_col = st.selectbox("Select Column to Edit", list(categories.keys()))
+        if selected_col in ["ID#", "Action"]:
+            st.warning("Cannot edit system-reserved column.")
+            return
         new_col_name = st.text_input("New Column Name")
         if st.button("Rename Column"):
-            categories[new_col_name] = categories.pop(selected_col)
-            save_categories(categories)
-            st.success("Column renamed")
+            if new_col_name in categories or new_col_name in ["ID#", "Action"]:
+                st.warning("New column name is reserved or already exists.")
+            else:
+                categories[new_col_name] = categories.pop(selected_col)
+                save_categories(categories)
+                st.success("Column renamed successfully")
         if st.button("Delete Column"):
             categories.pop(selected_col, None)
             save_categories(categories)
@@ -161,8 +173,11 @@ def view_inventory():
         st.info("No items found")
         return
 
-    columns = ["ID#"] + [col for col in df.columns if col != "ID#"] + ["Action"]
+    if st.button("📥 Export as CSV"):
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("Download CSV", data=csv, file_name="inventory.csv", mime="text/csv")
 
+    columns = ["ID#"] + [col for col in df.columns if col != "ID#"] + ["Action"]
     col_count = len(columns)
     header = st.columns(col_count)
     for i, col in enumerate(columns):
@@ -179,9 +194,9 @@ def view_inventory():
             else:
                 cols[i].write(row.get(col, ""))
 
-# --- Update Row ---
+# --- Update Inventory Row ---
 def update_column():
-    st.subheader("Update Inventory Row")
+    st.subheader("Edit Inventory Row")
     df = load_inventory()
     row_id = st.text_input("Enter ID# of row to update")
 
@@ -202,7 +217,7 @@ def update_column():
         else:
             st.warning("ID# not found")
 
-# --- Ask Inventory Agent with LiteLLM ---
+# --- Ask Inventory Agent with Groq (via LiteLLM) ---
 def ask_inventory_agent():
     import litellm
     st.subheader("Ask Inventory Agent")
@@ -212,7 +227,7 @@ def ask_inventory_agent():
         full_prompt = f"""Answer the following question about this inventory data:\n{df.to_string(index=False)}\n\nQuestion: {query}"""
         try:
             response = litellm.completion(
-                model="gpt-3.5-turbo",
+                model="groq/llama3-8b-8192",
                 messages=[
                     {"role": "system", "content": "You are an inventory expert."},
                     {"role": "user", "content": full_prompt}
@@ -226,21 +241,23 @@ def ask_inventory_agent():
 if not st.session_state.logged_in:
     login_signup()
 else:
-    st.sidebar.title(st.session_state.username)
-    if st.sidebar.button("Logout"):
+    st.sidebar.markdown(f"**👤 {st.session_state.username}**")
+    if st.sidebar.button("🚪 Logout"):
         st.session_state.logged_in = False
         st.session_state.username = ""
         st.rerun()
 
-    page = st.sidebar.radio("Navigation", ["Add Inventory", "Add Column", "View Inventory", "Update Column", "Ask Agent", "Change Password"])
+    page = st.sidebar.radio("Navigation", ["Add Inventory", "Add Column", "Edit Columns", "View Inventory", "Edit Inventory", "Ask Agent", "Change Password"])
 
     if page == "Add Inventory":
         add_inventory()
     elif page == "Add Column":
         add_column()
+    elif page == "Edit Columns":
+        edit_column()
     elif page == "View Inventory":
         view_inventory()
-    elif page == "Update Column":
+    elif page == "Edit Inventory":
         update_column()
     elif page == "Ask Agent":
         ask_inventory_agent()
