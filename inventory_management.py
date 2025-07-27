@@ -158,14 +158,25 @@ def view_inventory():
         st.info("No items found")
         return
 
-    # Display with delete buttons
-    for index, row in df.iterrows():
-        cols = st.columns(len(df.columns) + 1)  # +1 for delete button
+    # Prepare headers
+    columns = list(df.columns) + ["Action"]
+    st.markdown("### Inventory Table")
+
+    # Display headers
+    header_cols = st.columns(len(columns))
+    for i, col in enumerate(columns):
+        header_cols[i].markdown(f"**{col}**")
+
+    # Display data rows
+    for idx, row in df.iterrows():
+        row_cols = st.columns(len(columns))
         for i, col in enumerate(df.columns):
-            cols[i].write(row[col])
-        if cols[-1].button("Delete", key=f"del_{row['ID#']}"):
+            row_cols[i].write(row[col])
+        # Unique key per delete button using row index + ID
+        if row_cols[-1].button("Delete", key=f"delete_btn_{idx}_{row['ID#']}"):
             df = delete_row_by_id(df, row["ID#"])
             st.rerun()
+
 
 
     # Add delete button column
