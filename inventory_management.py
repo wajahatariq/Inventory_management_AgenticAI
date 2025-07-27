@@ -2,187 +2,184 @@ import streamlit as st
 import pandas as pd
 import os
 import hashlib
-import json
-from datetime import datetime
+import uuid
 
-# File paths
+# ---------- File paths ----------
 USER_FILE = "user.csv"
 INVENTORY_FILE = "inventory.csv"
-CATEGORY_FILE = "categories.json"
 
-st.set_page_config(page_title="Inventory Manager", layout="wide")
-
-# ---------------- Utility Functions ----------------
+# ---------- Helper Functions ----------
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def load_users():
     if os.path.exists(USER_FILE):
         return pd.read_csv(USER_FILE)
-    else:
-        return pd.DataFrame(columns=["email", "password"])
+    return pd.DataFrame(columns=["email", "password"])
 
-def save_users(users_df):
-    users_df.to_csv(USER_FILE, index=False)
+def save_users(df):
+    df.to_csv(USER_FILE, index=False)
 
 def load_inventory():
     if os.path.exists(INVENTORY_FILE):
         return pd.read_csv(INVENTORY_FILE)
-    else:
-        return pd.DataFrame()
+    return pd.DataFrame(columns=["ID#"])
 
-def save_inventory(inventory_df):
-    inventory_df.to_csv(INVENTORY_FILE, index=False)
+def save_inventory(df):
+    df.to_csv(INVENTORY_FILE, index=False)
 
-def load_categories():
-    if os.path.exists(CATEGORY_FILE):
-        with open(CATEGORY_FILE, "r") as f:
-            return json.load(f)
-    return {}
+def authenticate(email, password):
+    users = load_users()
+    if "email" not in users.columns:
+        return False
+    user_row = users[users["email"] == email]
+    if not user_row.empty and user_row.iloc[0]["password"] == hash_password(password):
+        return True
+    return False
 
-def save_categories(categories):
-    with open(CATEGORY_FILE, "w") as f:
-        json.dump(categories, f)
+def email_exists(email):
+    users = load_users()
+    return email in users["email"].values
 
-# ---------------- Authentication ----------------
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-if "current_user" not in st.session_state:
-    st.session_state.current_user = None
+def register_user(email, password):
+    users = load_users()
+    new_user = pd.DataFrame([[email, hash_password(password)]], columns=["email", "password"])
+    updated_users = pd.concat([users, new_user], ignore_index=True)
+    save_users(updated_users)
 
-users = load_users()
+def update_user_password(email, new_password):
+    users = load_users()
+    if email in users["email"].values:
+        users.loc[users["email"] == email, "password"] = hash_password(new_password)
+        save_users(users)
+        return True
+    return False
 
-if not st.session_state.authenticated:
-    auth_option = st.selectbox("Choose Action", ["Login", "Signup", "Change Password"])
+# ---------- Session State ----------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "user_email" not in st.session_state:
+    st.session_state.user_email = ""
 
-    if auth_option == "Signup":
-        st.subheader("Create Account")
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        if st.button("Sign Up"):
-            if email and password:
-                if email in users["email"].values:
-                    st.error("Email already exists.")
-                else:
-                    new_user = pd.DataFrame([[email, hash_password(password)]], columns=["email", "password"])
-                    users = pd.concat([users, new_user], ignore_index=True)
-                    save_users(users)
-                    st.success("Signup successful. Please log in.")
-            else:
-                st.error("All fields required.")
+# ---------- Auth UI ----------
+def login_ui():
+    st.title("Login")
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        if authenticate(email, password):
+            st.session_state.logged_in = True
+            st.session_state.user_email = email
+        else:
+            st.error("Invalid credentials")
+    st.markdown("---")
+    st.markdown("Don't have an account? Register below:")
+    new_email = st.text_input("New Email")
+    new_password = st.text_input("New Password", type="password")
+    if st.button("Register"):
+        if email_exists(new_email):
+            st.warning("Email already registered")
+        else:
+            register_user(new_email, new_password)
+            st.success("User registered. Please login.")
 
-    elif auth_option == "Login":
-        st.subheader("Login")
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        if st.button("Login"):
-            hashed_pwd = hash_password(password)
-            user_row = users[users["email"] == email]
-            if not user_row.empty and user_row.iloc[0]["password"] == hashed_pwd:
-                st.session_state.authenticated = True
-                st.session_state.current_user = email
-                st.experimental_rerun()
-            else:
-                st.error("Invalid credentials")
-
-    elif auth_option == "Change Password":
-        st.subheader("Change Password")
-        email = st.text_input("Email")
-        old_password = st.text_input("Current Password", type="password")
-        new_password = st.text_input("New Password", type="password")
-        if st.button("Update Password"):
-            hashed_old = hash_password(old_password)
-            user_index = users[users["email"] == email].index
-            if not user_index.empty and users.loc[user_index[0], "password"] == hashed_old:
-                users.loc[user_index[0], "password"] = hash_password(new_password)
-                save_users(users)
-                st.success("Password updated successfully.")
-            else:
-                st.error("Invalid credentials")
-else:
-    st.sidebar.title(f"Welcome, {st.session_state.current_user}")
+# ---------- Main UI ----------
+def inventory_ui():
+    st.sidebar.title("Navigation")
+    page = st.sidebar.radio("", ["View Inventory", "Add Item", "Update Category", "Ask Inventory Agent", "Change Password"])
     if st.sidebar.button("Logout"):
-        st.session_state.authenticated = False
-        st.session_state.current_user = None
+        st.session_state.logged_in = False
+        st.session_state.user_email = ""
         st.experimental_rerun()
 
-    page = st.sidebar.radio("Navigation", ["View Inventory", "Add Item", "Ask Inventory Agent", "Change Password"])
-
-    inventory = load_inventory()
-    categories = load_categories()
+    inventory_df = load_inventory()
 
     if page == "View Inventory":
-        st.subheader("Inventory List")
-        if inventory.empty:
-            st.info("No items yet.")
+        if not inventory_df.empty:
+            if "ID#" not in inventory_df.columns:
+                inventory_df.insert(0, "ID#", [str(uuid.uuid4())[:8] for _ in range(len(inventory_df))])
+            display_df = inventory_df.copy()
+            for idx in display_df.index:
+                st.write(display_df.loc[idx].to_dict())
+                if st.button(f"Delete Row {idx}"):
+                    inventory_df.drop(index=idx, inplace=True)
+                    save_inventory(inventory_df)
+                    st.success("Row deleted.")
+                    st.experimental_rerun()
         else:
-            for idx, row in inventory.iterrows():
-                col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 2])
-                with col1:
-                    st.markdown(f"**Item Name:** {row['Item Name']}")
-                with col2:
-                    st.markdown(f"**Quantity:** {row['Quantity']}")
-                with col3:
-                    st.markdown(f"**Price:** {row['Price']}")
-                dynamic_cols = list(set(inventory.columns) - set(['Item Name', 'Quantity', 'Price']))
-                with col4:
-                    for cat in dynamic_cols:
-                        st.markdown(f"**{cat}:** {row[cat]}")
-                with col5:
-                    if st.button("Delete", key=f"delete_{idx}"):
-                        inventory.drop(idx, inplace=True)
-                        save_inventory(inventory)
-                        st.experimental_rerun()
+            st.info("No inventory to display.")
 
     elif page == "Add Item":
         st.subheader("Add New Inventory Item")
+        new_item = {}
         item_name = st.text_input("Item Name")
-        quantity = st.number_input("Quantity", value=0, min_value=0)
-        price = st.number_input("Price", value=0.0, min_value=0.0, format="%.2f")
+        quantity = st.number_input("Quantity", min_value=0, step=1)
+        price = st.number_input("Price", min_value=0.0, step=0.01)
+        new_item["Item Name"] = item_name
+        new_item["Quantity"] = quantity
+        new_item["Price"] = price
 
-        # Existing category fields
-        cat_values = {}
-        for cat, dtype in categories.items():
-            if dtype == "text":
-                cat_values[cat] = st.text_input(cat)
-            elif dtype == "number":
-                cat_values[cat] = st.number_input(cat, value=0.0)
-
-        # Add new category
+        st.markdown("---")
         st.markdown("### Add New Category")
-        new_cat_name = st.text_input("New Category Name")
-        new_cat_type = st.selectbox("Select Type", ["text", "number"])
-        if st.button("Add Category"):
-            if new_cat_name:
-                categories[new_cat_name] = new_cat_type
-                save_categories(categories)
-                st.success("Category added. Refreshing...")
-                st.experimental_rerun()
+        col_name = st.text_input("New Column Name")
+        col_type = st.selectbox("Column Type", ["text", "number"])
+
+        if col_name:
+            if col_type == "text":
+                value = st.text_input(f"Enter value for {col_name}")
+            else:
+                value = st.number_input(f"Enter value for {col_name}", step=1)
+            new_item[col_name] = value
 
         if st.button("Add Item"):
-            if item_name:
-                new_item = {"Item Name": item_name, "Quantity": quantity, "Price": price}
-                new_item.update(cat_values)
-                inventory = pd.concat([inventory, pd.DataFrame([new_item])], ignore_index=True)
-                save_inventory(inventory)
-                st.success("Item added successfully.")
-            else:
-                st.error("Item name required.")
+            new_row = pd.DataFrame([{**{"ID#": str(uuid.uuid4())[:8]}, **new_item}])
+            inventory_df = pd.concat([inventory_df, new_row], ignore_index=True)
+            save_inventory(inventory_df)
+            st.success("Item added.")
 
-    elif page == "Ask Inventory Agent":
-        st.subheader("Ask the Inventory Agent")
-        st.write("(Agent logic would be here — integrated with Groq/Gemini/LLM)")
+    elif page == "Update Category":
+        st.subheader("Edit Inventory Row")
+        if not inventory_df.empty:
+            selected_id = st.text_input("Enter ID# to Edit")
+            row = inventory_df[inventory_df["ID#"] == selected_id]
+            if not row.empty:
+                idx = row.index[0]
+                updated_data = {}
+                for col in inventory_df.columns:
+                    if col == "ID#":
+                        continue
+                    val = inventory_df.at[idx, col]
+                    if isinstance(val, (int, float)):
+                        new_val = st.number_input(f"{col}", value=float(val))
+                    else:
+                        new_val = st.text_input(f"{col}", value=str(val))
+                    updated_data[col] = new_val
+                if st.button("Update Row"):
+                    for k, v in updated_data.items():
+                        inventory_df.at[idx, k] = v
+                    save_inventory(inventory_df)
+                    st.success("Row updated.")
+            else:
+                st.warning("ID# not found")
+        else:
+            st.info("Inventory is empty.")
 
     elif page == "Change Password":
         st.subheader("Change Password")
-        old_password = st.text_input("Old Password", type="password")
+        current_password = st.text_input("Current Password", type="password")
         new_password = st.text_input("New Password", type="password")
         if st.button("Update Password"):
-            hashed_old = hash_password(old_password)
-            user_index = users[users["email"] == st.session_state.current_user].index
-            if not user_index.empty and users.loc[user_index[0], "password"] == hashed_old:
-                users.loc[user_index[0], "password"] = hash_password(new_password)
-                save_users(users)
-                st.success("Password updated successfully.")
+            if authenticate(st.session_state.user_email, current_password):
+                update_user_password(st.session_state.user_email, new_password)
+                st.success("Password updated successfully")
             else:
-                st.error("Incorrect old password")
+                st.error("Current password incorrect")
+
+    elif page == "Ask Inventory Agent":
+        st.subheader("Coming Soon: Inventory Agent AI Assistant")
+
+# ---------- App Launch ----------
+if not st.session_state.logged_in:
+    login_ui()
+else:
+    inventory_ui()
