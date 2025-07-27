@@ -179,15 +179,6 @@ def view_inventory():
             else:
                 cols[i].write(row.get(col, ""))
 
-    # Add delete button column
-    df["Action"] = df["ID#"].apply(lambda x: f"Delete_{x}")
-    for index, row in df.iterrows():
-        delete_btn = st.button("DELETE", key=f"del_{row['ID#']}")
-        if delete_btn:
-            delete_callback(row["ID#"])
-
-    st.dataframe(df.drop(columns=["Action"]))
-
 # --- Update Columns ---
 def update_column():
     st.subheader("Update Inventory Row")
