@@ -179,7 +179,6 @@ def view_inventory():
             else:
                 cols[i].write(row.get(col, ""))
 
-
     # Add delete button column
     df["Action"] = df["ID#"].apply(lambda x: f"Delete_{x}")
     for index, row in df.iterrows():
