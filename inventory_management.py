@@ -105,14 +105,14 @@ def change_password():
         else:
             st.error("Current password incorrect")
 
-# --- Manage Columns ---
 def manage_columns():
     st.subheader("Manage Columns")
     categories = load_categories()
-    left, right = st.columns(2)
 
-    # Add Column
-    with left:
+    tab1, tab2 = st.tabs(["Add Column", "Edit Column"])
+
+    # --- Tab 1: Add Column ---
+    with tab1:
         st.markdown("#### Add Column")
         col_name = st.text_input("Column Name")
         col_type = st.selectbox("Column Type", ["text", "number", "date"])
@@ -125,31 +125,35 @@ def manage_columns():
                 st.success(f"Column '{col_name}' added successfully")
                 st.rerun()
 
-    # Edit/Delete Column
-    with right:
-        if categories:
-            st.markdown("#### Edit Column")
-            selected_col = st.selectbox("Select Column to Edit", list(categories.keys()))
-            tab1, tab2 = st.tabs(["Rename", "Delete"])
+    # --- Tab 2: Edit Column ---
+    with tab2:
+        if not categories:
+            st.info("No columns to edit.")
+            return
 
-            with tab1:
-                new_col_name = st.text_input("New Column Name", value=selected_col, key="rename_input")
-                if st.button("Rename Column"):
-                    if new_col_name in categories or new_col_name in ["ID#", "Action"]:
-                        st.warning("Name is reserved or already exists.")
-                    else:
-                        categories[new_col_name] = categories.pop(selected_col)
-                        save_categories(categories)
-                        st.success("Column renamed successfully")
-                        st.rerun()
+        st.markdown("#### Edit Column")
+        selected_col = st.selectbox("Select Column", list(categories.keys()), key="edit_select")
+        edit_tab1, edit_tab2 = st.tabs(["Rename", "Delete"])
 
-            with tab2:
-                st.markdown(f"Are you sure you want to delete column **{selected_col}**?")
-                if st.button("Delete Column"):
-                    categories.pop(selected_col, None)
+        with edit_tab1:
+            new_col_name = st.text_input("New Column Name", value=selected_col, key="rename_input")
+            if st.button("Rename Column"):
+                if new_col_name in categories or new_col_name in ["ID#", "Action"]:
+                    st.warning("Name is reserved or already exists.")
+                else:
+                    categories[new_col_name] = categories.pop(selected_col)
                     save_categories(categories)
-                    st.success("Column deleted")
+                    st.success("Column renamed successfully")
                     st.rerun()
+
+        with edit_tab2:
+            st.markdown(f"Are you sure you want to delete column **{selected_col}**?")
+            if st.button("Delete Column"):
+                categories.pop(selected_col, None)
+                save_categories(categories)
+                st.success("Column deleted")
+                st.rerun()
+
         else:
             st.info("No columns to edit.")
 
