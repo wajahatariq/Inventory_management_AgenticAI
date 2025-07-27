@@ -158,22 +158,27 @@ def view_inventory():
         st.info("No items found")
         return
 
-    st.dataframe(df, use_container_width=True)
+    # Define column layout: ID# + dynamic columns + Action
+    display_columns = ["ID#"] + [col for col in df.columns if col not in ["ID#", "Action", "Category"]] + ["Action"]
 
-    st.markdown("---")
-    st.markdown("### Delete an Inventory Row")
+    # Header row
+    col_count = len(display_columns)
+    header = st.columns(col_count)
+    for i, col in enumerate(display_columns):
+        header[i].markdown(f"**{col}**")
 
-    for index, row in df.iterrows():
-        col1, col2, col3 = st.columns([4, 4, 2])
-        with col1:
-            st.write(f"**ID#**: {row['ID#']}")
-        with col2:
-            st.write(f"**Category**: {row['Category']}")
-        with col3:
-            if st.button("Delete", key=f"delete_{row['ID#']}_{index}"):
-                df = delete_row_by_id(df, row["ID#"])
-                st.success(f"Deleted item with ID# {row['ID#']}")
-                st.rerun()
+    # Data rows
+    for idx, row in df.iterrows():
+        cols = st.columns(col_count)
+        for i, col in enumerate(display_columns):
+            if col == "Action":
+                if cols[i].button("Delete", key=f"del_{row['ID#']}_{idx}"):
+                    df = delete_row_by_id(df, row["ID#"])
+                    st.success(f"Deleted item with ID# {row['ID#']}")
+                    st.rerun()
+            else:
+                cols[i].write(row.get(col, ""))
+
 
     # Add delete button column
     df["Action"] = df["ID#"].apply(lambda x: f"Delete_{x}")
