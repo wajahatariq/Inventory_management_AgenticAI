@@ -105,65 +105,92 @@ def change_password():
         else:
             st.error("Current password incorrect")
 
-# --- Add Column ---
-def add_column():
-    st.subheader("Add Column")
+# --- Manage Columns (Add + Edit) ---
+def manage_columns():
+    st.subheader("Manage Columns")
     categories = load_categories()
-    col_name = st.text_input("Column Name")
+
+    st.markdown("### ➕ Add New Column")
+    col_name = st.text_input("New Column Name")
     col_type = st.selectbox("Column Type", ["text", "number", "date"])
 
-    if st.button("Save Column"):
+    if st.button("Add Column"):
         if col_name in categories or col_name in ["ID#", "Action"]:
             st.warning("Column name is reserved or already exists.")
         else:
             categories[col_name] = col_type
             save_categories(categories)
             st.success(f"Column '{col_name}' added successfully")
+            st.rerun()
 
-# --- Edit Column ---
-def edit_column():
-    st.subheader("Edit Existing Columns")
-    categories = load_categories()
     if categories:
-        selected_col = st.selectbox("Select Column to Edit", list(categories.keys()))
-        if selected_col in ["ID#", "Action"]:
-            st.warning("Cannot edit system-reserved column.")
-            return
-        new_col_name = st.text_input("New Column Name")
-        if st.button("Rename Column"):
+        st.markdown("---")
+        st.markdown("### ✏️ Edit or Delete Existing Columns")
+        selected_col = st.selectbox("Select Column", list(categories.keys()))
+        new_col_name = st.text_input("Rename Column", value=selected_col)
+        if st.button("Rename"):
             if new_col_name in categories or new_col_name in ["ID#", "Action"]:
-                st.warning("New column name is reserved or already exists.")
+                st.warning("Name is reserved or already exists.")
             else:
                 categories[new_col_name] = categories.pop(selected_col)
                 save_categories(categories)
                 st.success("Column renamed successfully")
+                st.rerun()
+
         if st.button("Delete Column"):
             categories.pop(selected_col, None)
             save_categories(categories)
             st.success("Column deleted")
+            st.rerun()
 
-# --- Add Inventory Item ---
-def add_inventory():
-    st.subheader("Add New Inventory Item")
+# --- Manage Inventory (Add + Edit) ---
+def manage_inventory():
+    st.subheader("Manage Inventory")
     df = load_inventory()
     categories = load_categories()
 
-    item_data = {}
-    item_data["ID#"] = int(datetime.now().timestamp())
+    tab1, tab2 = st.tabs(["Add Item", "Edit Existing Item"])
 
-    for col_name, col_type in categories.items():
-        if col_type == "number":
-            item_data[col_name] = st.number_input(col_name, value=0.0)
-        elif col_type == "date":
-            item_data[col_name] = st.date_input(col_name).strftime("%Y-%m-%d")
-        else:
-            item_data[col_name] = st.text_input(col_name)
+    with tab1:
+        st.markdown("### ➕ Add Inventory Item")
+        item_data = {"ID#": int(datetime.now().timestamp())}
+        for col_name, col_type in categories.items():
+            if col_type == "number":
+                item_data[col_name] = st.number_input(col_name, value=0.0, key=f"add_{col_name}")
+            elif col_type == "date":
+                item_data[col_name] = st.date_input(col_name, key=f"add_{col_name}").strftime("%Y-%m-%d")
+            else:
+                item_data[col_name] = st.text_input(col_name, key=f"add_{col_name}")
 
-    if st.button("Add Item"):
-        new_row = pd.DataFrame([item_data])
-        updated_df = pd.concat([df, new_row], ignore_index=True)
-        save_inventory(updated_df)
-        st.success("Item added successfully")
+        if st.button("Add Item"):
+            new_row = pd.DataFrame([item_data])
+            updated_df = pd.concat([df, new_row], ignore_index=True)
+            save_inventory(updated_df)
+            st.success("Item added successfully")
+            st.rerun()
+
+    with tab2:
+        st.markdown("### ✏️ Edit Inventory Row")
+        row_id = st.text_input("Enter ID# to Edit")
+        if row_id:
+            try:
+                row_id = int(row_id)
+                if row_id in df["ID#"].values:
+                    row_data = df[df["ID#"] == row_id].iloc[0].to_dict()
+                    updated_data = {}
+                    for col in df.columns:
+                        if col != "ID#":
+                            updated_data[col] = st.text_input(f"{col}", value=row_data.get(col, ""), key=f"edit_{col}")
+                    if st.button("Update Row"):
+                        for col in updated_data:
+                            df.loc[df["ID#"] == row_id, col] = updated_data[col]
+                        save_inventory(df)
+                        st.success("Row updated successfully")
+                        st.rerun()
+                else:
+                    st.warning("ID# not found")
+            except:
+                st.error("Invalid ID# format")
 
 # --- View Inventory ---
 def view_inventory():
@@ -193,29 +220,6 @@ def view_inventory():
                     st.rerun()
             else:
                 cols[i].write(row.get(col, ""))
-
-# --- Update Inventory Row ---
-def update_column():
-    st.subheader("Edit Inventory Row")
-    df = load_inventory()
-    row_id = st.text_input("Enter ID# of row to update")
-
-    if row_id:
-        row_id = int(row_id)
-        if row_id in df["ID#"].values:
-            row_data = df[df["ID#"] == row_id].iloc[0].to_dict()
-            updated_data = {}
-            for col in df.columns:
-                if col != "ID#":
-                    updated_data[col] = st.text_input(f"{col}", value=row_data.get(col, ""))
-            if st.button("Update Row"):
-                for col in updated_data:
-                    df.loc[df["ID#"] == row_id, col] = updated_data[col]
-                save_inventory(df)
-                st.success("Row updated successfully")
-                st.rerun()
-        else:
-            st.warning("ID# not found")
 
 # --- Ask Inventory Agent with Groq (LiteLLM) ---
 def ask_inventory_agent():
@@ -249,20 +253,16 @@ else:
         st.rerun()
 
     page = st.sidebar.radio("Navigation", [
-        "Add Inventory", "Add Column", "Edit Columns", "View Inventory",
-        "Edit Inventory", "Ask Agent", "Change Password"
+        "Manage Inventory", "Manage Columns", "View Inventory", 
+        "Ask Agent", "Change Password"
     ])
 
-    if page == "Add Inventory":
-        add_inventory()
-    elif page == "Add Column":
-        add_column()
-    elif page == "Edit Columns":
-        edit_column()
+    if page == "Manage Inventory":
+        manage_inventory()
+    elif page == "Manage Columns":
+        manage_columns()
     elif page == "View Inventory":
         view_inventory()
-    elif page == "Edit Inventory":
-        update_column()
     elif page == "Ask Agent":
         ask_inventory_agent()
     elif page == "Change Password":
