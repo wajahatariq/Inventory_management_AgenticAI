@@ -85,7 +85,7 @@ if not st.session_state.logged_in:
             if verify_user(username, password):
                 st.session_state.logged_in = True
                 st.session_state.username = username
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Invalid credentials.")
 
@@ -116,7 +116,7 @@ if page == "View Inventory":
                 if st.button("Delete", key=f"delete_{i}"):
                     df = df.drop(index=i).reset_index(drop=True)
                     save_inventory(df)
-                    st.experimental_rerun()
+                    st.rerun()
     else:
         st.info("Inventory is empty.")
 
@@ -250,7 +250,7 @@ if not st.session_state.logged_in:
             if verify_user(username, password):
                 st.session_state.logged_in = True
                 st.session_state.username = username
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Invalid credentials.")
 
@@ -281,7 +281,7 @@ if page == "View Inventory":
                 if st.button("Delete", key=f"delete_{i}"):
                     df = df.drop(index=i).reset_index(drop=True)
                     save_inventory(df)
-                    st.experimental_rerun()
+                    st.rerun()
     else:
         st.info("Inventory is empty.")
 
