@@ -6,6 +6,15 @@ import hashlib
 from datetime import datetime
 from typing import List
 
+st.markdown("""
+    <style>
+    button[kind="primary"] {
+        margin-right: 6px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+
 # --- File Paths ---
 USER_FILE = "user.csv"
 CATEGORY_FILE = "category.json"
