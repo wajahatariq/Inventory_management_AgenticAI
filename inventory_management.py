@@ -158,10 +158,15 @@ def view_inventory():
         st.info("No items found")
         return
 
-    # Add Delete buttons to each row
-    def delete_callback(id_val):
-        updated_df = delete_row_by_id(df, id_val)
-        st.rerun()
+    # Display with delete buttons
+    for index, row in df.iterrows():
+        cols = st.columns(len(df.columns) + 1)  # +1 for delete button
+        for i, col in enumerate(df.columns):
+            cols[i].write(row[col])
+        if cols[-1].button("Delete", key=f"del_{row['ID#']}"):
+            df = delete_row_by_id(df, row["ID#"])
+            st.rerun()
+
 
     # Add delete button column
     df["Action"] = df["ID#"].apply(lambda x: f"Delete_{x}")
