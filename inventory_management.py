@@ -105,54 +105,63 @@ def change_password():
         else:
             st.error("Current password incorrect")
 
-# --- Manage Columns (Add + Edit) ---
+# --- Manage Columns ---
 def manage_columns():
     st.subheader("Manage Columns")
     categories = load_categories()
+    left, right = st.columns(2)
 
-    st.markdown("### ➕ Add New Column")
-    col_name = st.text_input("New Column Name")
-    col_type = st.selectbox("Column Type", ["text", "number", "date"])
-
-    if st.button("Add Column"):
-        if col_name in categories or col_name in ["ID#", "Action"]:
-            st.warning("Column name is reserved or already exists.")
-        else:
-            categories[col_name] = col_type
-            save_categories(categories)
-            st.success(f"Column '{col_name}' added successfully")
-            st.rerun()
-
-    if categories:
-        st.markdown("---")
-        st.markdown("### ✏️ Edit or Delete Existing Columns")
-        selected_col = st.selectbox("Select Column", list(categories.keys()))
-        new_col_name = st.text_input("Rename Column", value=selected_col)
-        if st.button("Rename"):
-            if new_col_name in categories or new_col_name in ["ID#", "Action"]:
-                st.warning("Name is reserved or already exists.")
+    # Add Column
+    with left:
+        st.markdown("#### Add Column")
+        col_name = st.text_input("Column Name")
+        col_type = st.selectbox("Column Type", ["text", "number", "date"])
+        if st.button("Add Column"):
+            if col_name in categories or col_name in ["ID#", "Action"]:
+                st.warning("Column name is reserved or already exists.")
             else:
-                categories[new_col_name] = categories.pop(selected_col)
+                categories[col_name] = col_type
                 save_categories(categories)
-                st.success("Column renamed successfully")
+                st.success(f"Column '{col_name}' added successfully")
                 st.rerun()
 
-        if st.button("Delete Column"):
-            categories.pop(selected_col, None)
-            save_categories(categories)
-            st.success("Column deleted")
-            st.rerun()
+    # Edit/Delete Column
+    with right:
+        if categories:
+            st.markdown("#### Edit Column")
+            selected_col = st.selectbox("Select Column to Edit", list(categories.keys()))
+            tab1, tab2 = st.tabs(["Rename", "Delete"])
 
-# --- Manage Inventory (Add + Edit) ---
+            with tab1:
+                new_col_name = st.text_input("New Column Name", value=selected_col, key="rename_input")
+                if st.button("Rename Column"):
+                    if new_col_name in categories or new_col_name in ["ID#", "Action"]:
+                        st.warning("Name is reserved or already exists.")
+                    else:
+                        categories[new_col_name] = categories.pop(selected_col)
+                        save_categories(categories)
+                        st.success("Column renamed successfully")
+                        st.rerun()
+
+            with tab2:
+                st.markdown(f"Are you sure you want to delete column **{selected_col}**?")
+                if st.button("Delete Column"):
+                    categories.pop(selected_col, None)
+                    save_categories(categories)
+                    st.success("Column deleted")
+                    st.rerun()
+        else:
+            st.info("No columns to edit.")
+
+# --- Manage Inventory ---
 def manage_inventory():
     st.subheader("Manage Inventory")
     df = load_inventory()
     categories = load_categories()
-
     tab1, tab2 = st.tabs(["Add Item", "Edit Existing Item"])
 
     with tab1:
-        st.markdown("### ➕ Add Inventory Item")
+        st.markdown("#### Add Inventory Item")
         item_data = {"ID#": int(datetime.now().timestamp())}
         for col_name, col_type in categories.items():
             if col_type == "number":
@@ -170,7 +179,7 @@ def manage_inventory():
             st.rerun()
 
     with tab2:
-        st.markdown("### ✏️ Edit Inventory Row")
+        st.markdown("#### Edit Inventory Row")
         row_id = st.text_input("Enter ID# to Edit")
         if row_id:
             try:
@@ -221,7 +230,7 @@ def view_inventory():
             else:
                 cols[i].write(row.get(col, ""))
 
-# --- Ask Inventory Agent with Groq (LiteLLM) ---
+# --- Ask Inventory Agent ---
 def ask_inventory_agent():
     import litellm
     st.subheader("Ask Inventory Agent")
