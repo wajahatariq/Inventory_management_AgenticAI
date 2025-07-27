@@ -1,132 +1,182 @@
-# Streamlit Inventory Management App
 import streamlit as st
 import pandas as pd
-from typing import Dict, List
-import uuid
+import json
+import os
+from datetime import datetime
+from groq import Groq
 
-st.set_page_config(page_title="Inventory Management", layout="wide")
+# Initialize session state for login if not already set
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+if 'username' not in st.session_state:
+    st.session_state.username = ""
 
-# ------------------ SESSION SETUP ------------------
-if "users" not in st.session_state:
-    st.session_state.users = {"admin@example.com": {"password": "admin123", "username": "Admin"}}
+# File paths
+USERS_FILE = 'users.json'
+COLUMNS_FILE = 'columns.json'
+INVENTORY_FILE = 'inventory.csv'
 
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.current_user = None
+# Load or initialize users
+if os.path.exists(USERS_FILE):
+    with open(USERS_FILE, 'r') as f:
+        users = json.load(f)
+else:
+    users = {}
 
-if "inventory_data" not in st.session_state:
-    st.session_state.inventory_data = []
-
-if "columns_config" not in st.session_state:
-    st.session_state.columns_config = [
-        {"name": "ID#", "type": "text"},
-        {"name": "Action", "type": "text"},
+# Load or initialize columns
+if os.path.exists(COLUMNS_FILE):
+    with open(COLUMNS_FILE, 'r') as f:
+        columns = json.load(f)
+else:
+    columns = [
+        {"name": "ID#", "type": "number"},
+        {"name": "Action", "type": "text"}
     ]
+    with open(COLUMNS_FILE, 'w') as f:
+        json.dump(columns, f)
 
-# ------------------ AUTH ------------------
-def login():
-    st.title("Login")
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
-    if st.button("Login"):
-        user = st.session_state.users.get(email)
-        if user and user["password"] == password:
-            st.session_state.logged_in = True
-            st.session_state.current_user = {"email": email, "username": user["username"]}
-            st.rerun()
-        else:
-            st.error("Invalid email or password")
+# Ensure inventory file exists with correct columns
+if not os.path.exists(INVENTORY_FILE):
+    df = pd.DataFrame(columns=[col['name'] for col in columns])
+    df.to_csv(INVENTORY_FILE, index=False)
 
-def signup():
-    st.title("Signup")
-    email = st.text_input("Email")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    if st.button("Signup"):
-        if email in st.session_state.users:
-            st.warning("User already exists")
-        else:
-            st.session_state.users[email] = {"password": password, "username": username}
-            st.success("Signup successful. Please login.")
+# Groq Client Setup (replace with your actual key)
+client = Groq(api_key="your_groq_api_key")
 
-def logout():
-    st.session_state.logged_in = False
-    st.session_state.current_user = None
-    st.rerun()
+def save_users():
+    with open(USERS_FILE, 'w') as f:
+        json.dump(users, f)
 
-# ------------------ UTILITIES ------------------
-def get_column_names():
-    return [col["name"] for col in st.session_state.columns_config if col["name"] not in ["ID#", "Action"]]
+def save_columns():
+    with open(COLUMNS_FILE, 'w') as f:
+        json.dump(columns, f)
 
-def generate_id():
-    return str(uuid.uuid4())[:8]
+def load_inventory():
+    return pd.read_csv(INVENTORY_FILE)
 
-# ------------------ PAGES ------------------
-def view_inventory():
-    st.subheader("Inventory")
-    columns = [col["name"] for col in st.session_state.columns_config]
-    df = pd.DataFrame(st.session_state.inventory_data, columns=columns)
-    st.dataframe(df, use_container_width=True)
+def save_inventory(df):
+    df.to_csv(INVENTORY_FILE, index=False)
 
-def add_inventory():
-    st.subheader("Add Inventory Item")
-    item = {}
-    item["ID#"] = generate_id()
-    for col in get_column_names():
-        item[col] = st.text_input(f"Enter {col}")
-    item["Action"] = "-"
-    if st.button("Add Item"):
-        st.session_state.inventory_data.append(item)
-        st.success("Item added")
+def login_signup():
+    st.title("Inventory Management Login")
+    tab1, tab2 = st.tabs(["Login", "Signup"])
 
+    with tab1:
+        username = st.text_input("Username", key="login_user")
+        password = st.text_input("Password", type="password", key="login_pass")
+        if st.button("Login"):
+            if username in users and users[username]['password'] == password:
+                st.session_state.authenticated = True
+                st.session_state.username = username
+                st.success("Logged in successfully!")
+                st.experimental_rerun()
+            else:
+                st.error("Invalid credentials")
+
+    with tab2:
+        new_username = st.text_input("Choose a Username")
+        new_password = st.text_input("Choose a Password", type="password")
+        if st.button("Signup"):
+            if new_username in users:
+                st.error("Username already exists")
+            else:
+                users[new_username] = {"password": new_password}
+                save_users()
+                st.success("Account created! Please login.")
 
 def add_column():
     st.subheader("Add Column")
-    new_col_name = st.text_input("Column Name")
-    new_col_type = st.selectbox("Column Type", ["text", "number", "date"])
+    new_column_name = st.text_input("Enter new column name")
+    new_column_type = st.selectbox("Select column type", ["text", "number", "date"])
     if st.button("Add Column"):
-        if any(col["name"] == new_col_name for col in st.session_state.columns_config):
-            st.warning("Column already exists")
+        if new_column_name.strip():
+            if any(col['name'] == new_column_name for col in columns):
+                st.warning("Column already exists")
+            else:
+                columns.insert(-1, {"name": new_column_name, "type": new_column_type})
+                save_columns()
+                df = load_inventory()
+                df[new_column_name] = ""
+                save_inventory(df)
+                st.success("Column added successfully")
         else:
-            st.session_state.columns_config.insert(-1, {"name": new_col_name, "type": new_col_type})
-            st.success("Column added")
+            st.warning("Column name cannot be empty")
 
     st.subheader("Update Column")
-    all_columns = get_column_names()
-    if all_columns:
-        selected = st.selectbox("Select column to update", all_columns)
-        new_name = st.text_input("New Column Name", value=selected)
+    column_names = [col['name'] for col in columns if col['name'] not in ["ID#", "Action"]]
+    selected_col = st.selectbox("Select column to update", ["None"] + column_names)
+    if selected_col != "None":
+        new_name = st.text_input("Enter new column name", value=selected_col)
         if st.button("Rename Column"):
-            for col in st.session_state.columns_config:
-                if col["name"] == selected:
-                    col["name"] = new_name
-            st.success("Column renamed")
+            for col in columns:
+                if col['name'] == selected_col:
+                    col['name'] = new_name
+            save_columns()
+            df = load_inventory()
+            df.rename(columns={selected_col: new_name}, inplace=True)
+            save_inventory(df)
+            st.success("Column renamed successfully")
+
         if st.button("Delete Column"):
-            st.session_state.columns_config = [col for col in st.session_state.columns_config if col["name"] != selected]
-            st.success("Column deleted")
+            columns[:] = [col for col in columns if col['name'] != selected_col]
+            save_columns()
+            df = load_inventory()
+            df.drop(columns=[selected_col], inplace=True)
+            save_inventory(df)
+            st.success("Column deleted successfully")
 
+def add_inventory():
+    st.subheader("Add Inventory Item")
+    df = load_inventory()
+    new_row = {}
+    for col in columns:
+        if col['name'] in ["ID#", "Action"]:
+            continue
+        val = st.text_input(f"Enter {col['name']}")
+        new_row[col['name']] = val
 
-def ask_agent():
+    if st.button("Add Item"):
+        new_row['ID#'] = len(df) + 1
+        new_row['Action'] = "Edit/Delete"
+        df = df.append(new_row, ignore_index=True)
+        save_inventory(df)
+        st.success("Item added to inventory")
+
+def view_inventory():
+    st.subheader("Inventory")
+    df = load_inventory()
+    st.dataframe(df)
+
+def ask_inventory_agent():
     st.subheader("Ask Inventory Agent")
-    prompt = st.text_area("Ask something about your inventory")
-    if st.button("Send to GroqAI"):
-        # Dummy integration - replace this with actual API call
-        answer = f"(GroqAI would respond to): {prompt}"
-        st.write(answer)
+    prompt = st.text_area("Enter your question about the inventory")
+    if st.button("Ask"):
+        try:
+            response = client.chat.completions.create(
+                model="mixtral-8x7b-32768",
+                messages=[
+                    {"role": "system", "content": "You are an expert inventory management assistant."},
+                    {"role": "user", "content": prompt},
+                ]
+            )
+            st.write(response.choices[0].message.content)
+        except Exception as e:
+            st.error(f"Error: {e}")
 
-# ------------------ MAIN APP ------------------
-if not st.session_state.logged_in:
-    menu = st.sidebar.selectbox("Welcome", ["Login", "Signup"])
-    if menu == "Login":
-        login()
-    else:
-        signup()
-else:
-    st.sidebar.markdown(f"### 👤 {st.session_state.current_user['username']}")
+def main():
+    if not st.session_state.authenticated:
+        login_signup()
+        return
+
+    st.sidebar.title(st.session_state.username)
+    page = st.sidebar.radio("", ["View Inventory", "Add Inventory", "Add Column", "Ask Inventory Agent"])
     if st.sidebar.button("Logout"):
-        logout()
+        st.session_state.authenticated = False
+        st.session_state.username = ""
+        st.experimental_rerun()
 
-    page = st.sidebar.radio("Navigation", ["View Inventory", "Add Inventory", "Add Column", "Ask Inventory Agent"])
+    st.title("Inventory Management System")
+
     if page == "View Inventory":
         view_inventory()
     elif page == "Add Inventory":
@@ -134,4 +184,7 @@ else:
     elif page == "Add Column":
         add_column()
     elif page == "Ask Inventory Agent":
-        ask_agent()
+        ask_inventory_agent()
+
+if __name__ == '__main__':
+    main()
