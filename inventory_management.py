@@ -86,7 +86,11 @@ def login_signup():
             if new_username in users.username.values:
                 st.warning("Username already exists")
             else:
-                users = users.append({"username": new_username, "email": new_email, "password": hash_password(new_password)}, ignore_index=True)
+                users = users.append({
+                    "username": new_username,
+                    "email": new_email,
+                    "password": hash_password(new_password)
+                }, ignore_index=True)
                 save_users(users)
                 st.success("Signup successful! Please login.")
 
@@ -105,13 +109,14 @@ def change_password():
         else:
             st.error("Current password incorrect")
 
+# --- Manage Columns ---
 def manage_columns():
     st.subheader("Manage Columns")
     categories = load_categories()
 
     tab1, tab2 = st.tabs(["Add Column", "Edit Column"])
 
-    # --- Tab 1: Add Column ---
+    # Add Column Tab
     with tab1:
         st.markdown("#### Add Column")
         col_name = st.text_input("Column Name")
@@ -125,7 +130,7 @@ def manage_columns():
                 st.success(f"Column '{col_name}' added successfully")
                 st.rerun()
 
-    # --- Tab 2: Edit Column ---
+    # Edit Column Tab
     with tab2:
         if not categories:
             st.info("No columns to edit.")
@@ -133,9 +138,9 @@ def manage_columns():
 
         st.markdown("#### Edit Column")
         selected_col = st.selectbox("Select Column", list(categories.keys()), key="edit_select")
-        edit_tab1, edit_tab2 = st.tabs(["Rename", "Delete"])
+        subtab1, subtab2 = st.tabs(["Rename", "Delete"])
 
-        with edit_tab1:
+        with subtab1:
             new_col_name = st.text_input("New Column Name", value=selected_col, key="rename_input")
             if st.button("Rename Column"):
                 if new_col_name in categories or new_col_name in ["ID#", "Action"]:
@@ -146,16 +151,13 @@ def manage_columns():
                     st.success("Column renamed successfully")
                     st.rerun()
 
-        with edit_tab2:
+        with subtab2:
             st.markdown(f"Are you sure you want to delete column **{selected_col}**?")
             if st.button("Delete Column"):
                 categories.pop(selected_col, None)
                 save_categories(categories)
                 st.success("Column deleted")
                 st.rerun()
-
-        else:
-            st.info("No columns to edit.")
 
 # --- Manage Inventory ---
 def manage_inventory():
