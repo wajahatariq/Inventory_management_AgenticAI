@@ -86,11 +86,11 @@ def login_signup():
             if new_username in users.username.values:
                 st.warning("Username already exists")
             else:
-                users = users.append({
-                    "username": new_username,
-                    "email": new_email,
-                    "password": hash_password(new_password)
-                }, ignore_index=True)
+                new_user = pd.DataFrame([{
+                "username": new_username,
+                "email": new_email,
+                "password": hash_password(new_password)}])
+                users = pd.concat([users, new_user], ignore_index=True)
                 save_users(users)
                 st.success("Signup successful! Please login.")
 
